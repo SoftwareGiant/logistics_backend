@@ -7,6 +7,8 @@ const {
   approveUser,
   rejectUser,
   createAdmin,
+  getDashboardStats ,
+  getAllBookingsAdmin
 } = require("../controllers/adminController");
 
 router.use(protect);
@@ -22,4 +24,17 @@ router.put("/approve/:id", approveUser);
 // ❌ Reject user
 router.put("/reject/:id", rejectUser);
 
+router.get(
+  "/dashboard",
+  protect,
+  authorizeRoles("admin"),
+  getDashboardStats
+);
+// all bookings
+router.get(
+  "/bookings",
+  protect,
+  authorizeRoles("admin"),
+  getAllBookingsAdmin
+);
 module.exports = router;

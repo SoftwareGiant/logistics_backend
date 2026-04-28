@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
-
+const Booking = require("../models/bookingModel");
+const Truck = require("../models/truckModel");
 const User = require("../models/userModel");
 const Company = require("../models/companyModel");
 
@@ -152,6 +153,175 @@ exports.createAdmin = async (req, res) => {
         role: admin.role,
       },
     });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
+exports.getDashboardStats = async (req, res) => {
+  try {
+    // ================= BASIC STATS =================
+
+    const totalTrips = await Booking.countDocuments();
+
+    const returnTrips = await Booking.countDocuments({
+      isReturnTrip: true,
+    });
+
+    const freshTrips = totalTrips - returnTrips;
+
+    const revenueAgg = await Booking.aggregate([
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$price" },
+        },
+      },
+    ]);
+
+    const totalRevenue = revenueAgg[0]?.total || 0;
+
+    const activeTrucks = await Truck.countDocuments({
+      availability: "busy",
+    });
+
+    const emptyTripReduction = totalTrips > 0
+      ? Math.round((returnTrips / totalTrips) * 100)
+      : 0;
+
+    // ================= MONTHLY TRIP DISTRIBUTION =================
+
+    const monthlyData = await Booking.aggregate([
+      {
+        $group: {
+          _id: {
+            month: { $month: "$createdAt" },
+            isReturn: "$isReturnTrip",
+          },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    // format month-wise
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+    let monthlyTrips = months.map((m, i) => ({
+      month: m,
+      returnTrips: 0,
+      freshTrips: 0,
+    }));
+
+    monthlyData.forEach((item) => {
+      const monthIndex = item._id.month - 1;
+
+      if (item._id.isReturn) {
+        monthlyTrips[monthIndex].returnTrips = item.count;
+      } else {
+        monthlyTrips[monthIndex].freshTrips = item.count;
+      }
+    });
+
+    // ================= PIE CHART =================
+
+    const returnPercent = totalTrips > 0
+      ? Math.round((returnTrips / totalTrips) * 100)
+      : 0;
+
+    const freshPercent = 100 - returnPercent;
+
+    const tripTypeBreakdown = {
+      returnTrips: returnPercent,
+      freshTrips: freshPercent,
+    };
+
+    // ================= FINAL RESPONSE =================
+
+    res.json({
+      stats: {
+        totalTrips,
+        returnTrips,
+        freshTrips,
+        emptyTripReduction,
+        totalRevenue,
+        activeTrucks,
+      },
+      monthlyTrips,
+      tripTypeBreakdown,
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
+exports.getAllBookingsAdmin = async (req, res) => {
+  try {
+    let {
+      page = 1,
+      limit = 10,
+      status,
+      tripType, // return / fresh
+      search,   // optional (truckNumber / company name later)
+      sort = "latest",
+    } = req.query;
+
+    page = Number(page);
+    limit = Number(limit);
+
+    // ================= FILTER =================
+    let query = {};
+
+    if (status) {
+      query.status = status; // pending / accepted / completed / cancelled
+    }
+
+    if (tripType === "return") {
+      query.isReturnTrip = true;
+    }
+
+    if (tripType === "fresh") {
+      query.isReturnTrip = false;
+    }
+
+    // ================= SEARCH (basic) =================
+    if (search) {
+      query.$or = [
+        { truckNumber: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    // ================= SORT =================
+    let sortOption = { createdAt: -1 }; // default latest
+
+    if (sort === "oldest") {
+      sortOption = { createdAt: 1 };
+    }
+
+    // ================= QUERY =================
+    const total = await Booking.countDocuments(query);
+
+    const bookings = await Booking.find(query)
+      .populate("companyId", "companyName")
+      .populate("truckId", "truckNumber type capacity")
+      .populate("driverId", "name phone")
+      .populate("truckOwnerId", "name phone")
+      .sort(sortOption)
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    // ================= RESPONSE =================
+    res.json({
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      bookings,
+    });
+
   } catch (error) {
     res.status(500).json({
       message: error.message,

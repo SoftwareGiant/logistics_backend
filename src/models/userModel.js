@@ -29,7 +29,7 @@ const userSchema = new mongoose.Schema(
 
     role: {
       type: String,
-      enum: ["company","company_staff", "truck_owner", "driver", "admin"],
+      enum: ["company", "company_staff", "truck_owner", "driver", "admin"],
       required: true,
     },
 
@@ -54,7 +54,15 @@ const userSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
+    assignedTruckId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Truck",
+    },
 
+    licenseNumber: {
+      type: String,
+      trim: true,
+    },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

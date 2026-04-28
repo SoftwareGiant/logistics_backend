@@ -47,18 +47,29 @@ const bookingSchema = new mongoose.Schema(
       default: false,
     },
 
-status: {
-    type: String, 
-  enum: [
-    "pending",     // company created
-    "accepted",    // owner accepted
-    "rejected",    // owner rejected
-    "in_transit",  // driver started
-    "delivered",   // completed
-    "cancelled"
-  ],
-  default: "pending" 
-},
+    // 🔥 UPDATED STATUS FLOW
+    status: {
+      type: String,
+      enum: [
+        "pending",     // created by company
+        "accepted",    // owner accepted
+        "rejected",
+        "assigned",    // driver assigned
+        "en_route",    // driver going to pickup
+        "picked_up",   // goods picked
+        "in_transit",  // on the way
+        "delivered",   // completed
+        "cancelled",
+      ],
+      default: "pending",
+    },
+
+    // 🕒 TIMESTAMPS (IMPORTANT)
+    assignedAt: Date,
+    enRouteAt: Date,
+    pickedUpAt: Date,
+    inTransitAt: Date,
+    deliveredAt: Date,
   },
   { timestamps: true }
 );

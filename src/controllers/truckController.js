@@ -1,4 +1,5 @@
 const Truck = require("../models/truckModel");
+const Booking = require("../models/bookingModel");
 
 // ================= SEARCH TRUCKS =================
 exports.searchTrucks = async (req, res) => {
@@ -79,6 +80,77 @@ exports.searchTrucks = async (req, res) => {
     res.json({
       returnTrucks,
       newTripTrucks,
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
+
+
+exports.getOwnerFleet = async (req, res) => {
+  try {
+    const ownerId = req.user._id;
+
+    // 🔥 get all trucks of owner
+    const trucks = await Truck.find({ ownerId }).lean();
+
+    // 🔥 get active bookings for those trucks
+    const truckIds = trucks.map((t) => t._id);
+
+    const activeBookings = await Booking.find({
+      truckId: { $in: truckIds },
+      status: {
+        $in: ["assigned", "en_route", "picked_up", "in_transit"],
+      },
+    }).lean();
+
+    // 🔥 map bookings by truckId
+    const bookingMap = {};
+    activeBookings.forEach((b) => {
+      bookingMap[b.truckId.toString()] = b;
+    });
+
+    // 🔥 prepare response
+    const fleet = trucks.map((t) => {
+      const booking = bookingMap[t._id.toString()];
+
+      let status = "Available";
+      let destination = null;
+
+      if (booking) {
+        if (booking.status === "assigned") {
+          status = "Loading";
+        } else if (
+          ["en_route", "picked_up", "in_transit"].includes(booking.status)
+        ) {
+          status = "In Transit";
+        }
+
+        destination = booking.dropCity;
+      }
+
+      return {
+        _id: t._id,
+        truckNumber: t.truckNumber,
+        capacity: t.capacity,
+        type: t.type,
+
+        currentLocation: t.currentLocation,
+
+        status,
+        destination,
+
+        availability: t.availability,
+      };
+    });
+
+    res.json({
+      total: fleet.length,
+      fleet,
     });
 
   } catch (error) {

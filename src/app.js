@@ -4,6 +4,8 @@ const authRoutes = require("./routes/authRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const bookingRoutes = require("./routes/bookingRoutes");
 const truckRoutes = require("./routes/truckRoutes");
+const ownerRoutes = require("./routes/ownerRoutes");
+
 const app = express();
 
 // Middlewares
@@ -14,6 +16,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/trucks", truckRoutes);
 app.use("/api/bookings", bookingRoutes);
+app.use("/api/owner", ownerRoutes);
 // Health check
 app.get("/", (req, res) => {
   res.send("API Running 🚀");

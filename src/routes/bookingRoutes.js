@@ -6,7 +6,9 @@ const {   createBooking,
   getOwnerBookings,
   getDriverBookings,
   updateBookingByOwner,
-  updateBookingByDriver } = require("../controllers/bookingController");
+  updateBookingByDriver, 
+  getDriverCurrentTrip,
+  getDriverTripHistory} = require("../controllers/bookingController");
 const { protect } = require("../middlewares/authMiddleware");
 const { authorizeRoles } = require("../middlewares/roleMiddleware");
 
@@ -33,6 +35,19 @@ router.put(
   authorizeRoles("driver"),
   updateBookingByDriver
 );
+// driver current trip 
+router.get(
+  "/driver/current",
+  protect,
+  authorizeRoles("driver"),
+  getDriverCurrentTrip
+);
 
-
+// driver trip history
+router.get(
+  "/driver/history",
+  protect,
+  authorizeRoles("driver"),
+  getDriverTripHistory
+);
 module.exports = router;

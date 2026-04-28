@@ -111,29 +111,48 @@ exports.updateBookingByOwner = async (req, res) => {
 
     const booking = await Booking.findById(bookingId).populate("truckId");
 
-    if (!booking) throw new Error("Booking not found");
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found" });
+    }
 
-    // 🔐 ensure owner owns this truck
+    // 🔐 ownership check
     if (booking.truckId.ownerId.toString() !== ownerId.toString()) {
       return res.status(403).json({ message: "Unauthorized" });
     }
 
     if (booking.status !== "pending") {
-      throw new Error("Booking already processed");
+      return res.status(400).json({ message: "Booking already processed" });
     }
 
+    // ================= ACCEPT =================
     if (action === "accept") {
-      booking.status = "accepted";
 
-      // 🚛 mark truck busy
-      await Truck.findByIdAndUpdate(booking.truckId._id, {
-        availability: "busy",
+      // 🔥 find available driver for this truck
+      const driver = await User.findOne({
+        assignedTruckId: booking.truckId._id,
+        role: "driver",
       });
 
-    } else if (action === "reject") {
+      if (!driver) {
+        return res.status(400).json({
+          message: "No driver assigned to this truck",
+        });
+      }
+
+      // 🔥 assign driver + update status
+      booking.driverId = driver._id;
+      booking.status = "assigned";
+      booking.assignedAt = new Date();
+
+    }
+
+    // ================= REJECT =================
+    else if (action === "reject") {
       booking.status = "rejected";
-    } else {
-      throw new Error("Invalid action");
+    }
+
+    else {
+      return res.status(400).json({ message: "Invalid action" });
     }
 
     await booking.save();
@@ -144,7 +163,7 @@ exports.updateBookingByOwner = async (req, res) => {
     });
 
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    res.status(500).json({ message: error.message });
   }
 };
 
@@ -158,41 +177,74 @@ exports.updateBookingByDriver = async (req, res) => {
 
     const booking = await Booking.findById(bookingId);
 
-    if (!booking) throw new Error("Booking not found");
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found" });
+    }
 
-    // 🔐 check driver assigned
-    if (booking.driverId?.toString() !== driverId.toString()) {
+    // 🔐 driver check
+    if (!booking.driverId || booking.driverId.toString() !== driverId.toString()) {
       return res.status(403).json({ message: "Unauthorized" });
     }
 
-    // 🔥 allowed transitions
-    const allowed = ["in_transit", "delivered"];
+    // 🔥 FULL STATUS FLOW
+    const validFlow = {
+      assigned: ["en_route"],
+      en_route: ["picked_up"],
+      picked_up: ["in_transit"],
+      in_transit: ["delivered"],
+    };
 
-    if (!allowed.includes(status)) {
-      throw new Error("Invalid status update");
+    // ❌ invalid transition
+    if (!validFlow[booking.status]?.includes(status)) {
+      return res.status(400).json({
+        message: `Invalid status transition from ${booking.status} → ${status}`,
+      });
     }
 
+    // 🔄 update status
     booking.status = status;
-    await booking.save();
 
-    // 🔓 if delivered → free truck
+    // 🕒 timestamps
+    if (status === "en_route") {
+      booking.enRouteAt = new Date();
+    }
+
+    if (status === "picked_up") {
+      booking.pickedUpAt = new Date();
+
+      // 🚛 truck becomes busy
+      await Truck.findByIdAndUpdate(booking.truckId, {
+        availability: "busy",
+      });
+    }
+
+    if (status === "in_transit") {
+      booking.inTransitAt = new Date();
+    }
+
     if (status === "delivered") {
+      booking.deliveredAt = new Date();
+
+      // 🚛 truck free + update location
       await Truck.findByIdAndUpdate(booking.truckId, {
         availability: "available",
         currentLocation: booking.dropCity,
       });
     }
 
+    await booking.save();
+
     res.json({
-      message: "Status updated",
+      message: "Status updated successfully",
       booking,
     });
 
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    res.status(500).json({
+      message: error.message,
+    });
   }
 };
-
 
 exports.getCompanyBookings = async (req, res) => {
   try {
@@ -260,5 +312,91 @@ exports.getDriverBookings = async (req, res) => {
 
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+
+
+
+exports.getDriverCurrentTrip = async (req, res) => {
+  try {
+    const driverId = req.user._id;
+
+    // 🔥 CURRENT TRIP (running)
+    const currentTrip = await Booking.findOne({
+      driverId,
+      status: {
+        $in: ["en_route", "picked_up", "in_transit"],
+      },
+    })
+      .sort({ updatedAt: -1 })
+      .populate("truckId")
+      .populate("companyId", "name phone");
+
+    // 🔥 NEXT TRIP (assigned but not started)
+    const nextTrip = await Booking.findOne({
+      driverId,
+      status: "assigned",
+    })
+      .sort({ createdAt: 1 })
+      .populate("truckId")
+      .populate("companyId", "name phone");
+
+    res.json({
+      currentTrip: currentTrip || null,
+      nextTrip: nextTrip || null,
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
+
+exports.getDriverTripHistory = async (req, res) => {
+  try {
+    const driverId = req.user._id;
+
+    let { page = 1, limit = 10, sort = "latest" } = req.query;
+
+    page = Number(page);
+    limit = Number(limit);
+
+    // 🔥 only past trips
+    const query = {
+      driverId,
+      status: {
+        $in: ["delivered", "cancelled"],
+      },
+    };
+
+    // 🔄 sorting
+    let sortOption = { createdAt: -1 };
+    if (sort === "oldest") {
+      sortOption = { createdAt: 1 };
+    }
+
+    const total = await Booking.countDocuments(query);
+
+    const bookings = await Booking.find(query)
+      .populate("truckId", "truckNumber type")
+      .populate("companyId", "name phone")
+      .sort(sortOption)
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    res.json({
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      bookings,
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
   }
 };
