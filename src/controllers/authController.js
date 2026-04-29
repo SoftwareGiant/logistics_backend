@@ -26,7 +26,7 @@ exports.registerCompany = async (req, res) => {
       representatives = [],
     } = req.body;
 
-    // 🔍 basic validation
+    // 🔍 validation
     if (!name || !password || (!email && !phone)) {
       throw new Error("Basic details required");
     }
@@ -35,8 +35,8 @@ exports.registerCompany = async (req, res) => {
       throw new Error("Company details required");
     }
 
-    // 🔍 check owner duplicate
-    const existingUser = await User.findOne({
+    // 🔍 check duplicate owner
+    let existingUser = await User.findOne({
       $or: [{ email }, { phone }],
     }).session(session);
 
@@ -44,7 +44,7 @@ exports.registerCompany = async (req, res) => {
       throw new Error("User already exists");
     }
 
-    // 👤 create company owner
+    // 👤 create owner
     const [owner] = await User.create(
       [
         {
@@ -62,6 +62,7 @@ exports.registerCompany = async (req, res) => {
 
     // ================= 👨‍💼 CREATE REPRESENTATIVES =================
     let createdRepresentatives = [];
+    let repDocsForCompany = [];
 
     if (representatives.length > 0) {
       const repDocs = [];
@@ -73,7 +74,7 @@ exports.registerCompany = async (req, res) => {
           throw new Error(`Invalid representative data at index ${i}`);
         }
 
-        // 🔍 duplicate check for reps
+        // 🔍 duplicate check
         const existingRep = await User.findOne({
           $or: [{ email: rep.email }, { phone: rep.phone }],
         }).session(session);
@@ -88,8 +89,14 @@ exports.registerCompany = async (req, res) => {
           phone: rep.phone,
           password: rep.password,
           role: "company_staff",
-          companyId: null, // set later
           createdBy: ownerId,
+        });
+
+        // 🔥 prepare for company schema
+        repDocsForCompany.push({
+          name: rep.name,
+          email: rep.email,
+          phone: rep.phone,
         });
       }
 
@@ -104,19 +111,20 @@ exports.registerCompany = async (req, res) => {
           companyName,
           location,
           gstNumber,
+          representatives: repDocsForCompany, // 🔥 FIX HERE
         },
       ],
       { session }
     );
 
-    // 🔗 link owner → company
+    // 🔗 link owner
     await User.findByIdAndUpdate(
       ownerId,
       { companyId: company._id },
       { session }
     );
 
-    // 🔗 link reps → company
+    // 🔗 link reps
     if (createdRepresentatives.length > 0) {
       const repIds = createdRepresentatives.map((r) => r._id);
 
@@ -127,25 +135,14 @@ exports.registerCompany = async (req, res) => {
       );
     }
 
-    // ✅ commit
     await session.commitTransaction();
     session.endSession();
 
     res.status(201).json({
       message: "Company registered, pending approval",
-      owner: {
-        _id: owner._id,
-        name: owner.name,
-        email: owner.email,
-        role: owner.role,
-      },
+      owner,
       company,
-      representatives: createdRepresentatives.map((r) => ({
-        _id: r._id,
-        name: r.name,
-        email: r.email,
-        phone: r.phone,
-      })),
+      representatives: createdRepresentatives,
     });
 
   } catch (error) {
@@ -176,10 +173,19 @@ exports.registerTruckOwner = async (req, res) => {
     if (!name || !password || (!email && !phone)) {
       throw new Error("Basic details required");
     }
+    let existingUser
+    if (email) {
+      existingUser = await User.findOne({
+        $or: [{ email }],
+      }).session(session);
+    }
 
-    const existingUser = await User.findOne({
-      $or: [{ email }, { phone }],
-    });
+    if (phone) {
+      existingUser = await User.findOne({
+        $or: [{ phone }],
+      }).session(session);
+    }
+
 
     if (existingUser) {
       throw new Error("User already exists");
