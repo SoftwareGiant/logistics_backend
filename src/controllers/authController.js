@@ -231,9 +231,13 @@ exports.registerTruckOwner = async (req, res) => {
             from: t.usualRoute.from.toLowerCase().trim(),
             to: t.usualRoute.to.toLowerCase().trim(),
           },
-          currentLocation: t.currentLocation
-            ? t.currentLocation.toLowerCase().trim()
-            : t.usualRoute.from.toLowerCase().trim(),
+          currentLocation: {
+            city: t.currentLocation?.city
+              ? t.currentLocation.city.toLowerCase().trim()
+              : t.usualRoute.from.toLowerCase().trim(),
+
+            coordinates: t.currentLocation?.coordinates || [0, 0],
+          },
           pricing: {
             normalPrice: t.pricing.normalPrice,
             returnPrice: t.pricing.returnPrice,

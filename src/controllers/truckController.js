@@ -15,21 +15,32 @@ exports.searchTrucks = async (req, res) => {
     pickup = pickup.toLowerCase().trim();
     drop = drop.toLowerCase().trim();
 
+    // 🔥 populate owner
     const trucks = await Truck.find({
       $or: [
         { "usualRoute.from": pickup, "usualRoute.to": drop },
         { "usualRoute.from": drop, "usualRoute.to": pickup },
       ],
-    }).lean();
+    })
+      .populate({
+        path: "ownerId",
+        select: "verificationStatus",
+      })
+      .lean();
 
     let returnTrucks = [];
     let newTripTrucks = [];
 
     trucks.forEach((t) => {
+      // ❌ skip unapproved owners
+      if (t.ownerId?.verificationStatus !== "approved") return;
+
+      const currentCity = t.currentLocation?.city;
+
       const isNewTrip =
         t.usualRoute.from === pickup &&
         t.usualRoute.to === drop &&
-        t.currentLocation === pickup &&
+        currentCity === pickup &&
         t.availability === "available";
 
       const isReturn =
@@ -38,42 +49,39 @@ exports.searchTrucks = async (req, res) => {
 
       const isReadyForReturn =
         isReturn &&
-        t.currentLocation === pickup &&
+        currentCity === pickup &&
         t.availability === "available";
 
       const isRunningReturn =
         isReturn &&
         t.availability === "busy";
 
-      // 🔥 COMMON DATA
+      if (!isReturn && !isNewTrip) return;
+
       const formatted = {
         _id: t._id,
         truckNumber: t.truckNumber,
         capacity: t.capacity,
         type: t.type,
+
         from: t.usualRoute.from,
         to: t.usualRoute.to,
-        currentLocation: t.currentLocation,
+        currentLocation: currentCity,
 
         price: isReturn
           ? t.pricing.returnPrice
           : t.pricing.normalPrice,
 
+        isReturn,
+        isNewTrip,
         isReadyForReturn,
         isRunningReturn,
       };
 
-      // 🔥 GROUPING
-      if (isReturn) {
-        returnTrucks.push(formatted);
-      }
-
-      if (isNewTrip) {
-        newTripTrucks.push(formatted);
-      }
+      if (isReturn) returnTrucks.push(formatted);
+      if (isNewTrip) newTripTrucks.push(formatted);
     });
 
-    // 🔥 SORTING
     returnTrucks.sort((a, b) => a.price - b.price);
     newTripTrucks.sort((a, b) => a.price - b.price);
 
@@ -88,7 +96,6 @@ exports.searchTrucks = async (req, res) => {
     });
   }
 };
-
 
 
 exports.getOwnerFleet = async (req, res) => {
