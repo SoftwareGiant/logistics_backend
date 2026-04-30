@@ -35,10 +35,19 @@ exports.registerCompany = async (req, res) => {
       throw new Error("Company details required");
     }
 
-    // 🔍 check duplicate owner
-    let existingUser = await User.findOne({
-      $or: [{ email }, { phone }],
-    }).session(session);
+
+    let existingUser
+    if (email) {
+      existingUser = await User.findOne({
+        $or: [{ email }],
+      }).session(session);
+    }
+
+    if (phone) {
+      existingUser = await User.findOne({
+        $or: [{ phone }],
+      }).session(session);
+    }
 
     if (existingUser) {
       throw new Error("User already exists");
