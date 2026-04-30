@@ -7,8 +7,12 @@ const {
   approveUser,
   rejectUser,
   createAdmin,
+  getApprovedCompanyOwners,
+  getApprovedTruckOwners,
   getDashboardStats ,
-  getAllBookingsAdmin
+  getAllBookingsAdmin,
+    getAllRequirements,
+  getRequirementOffersAdmin,
 } = require("../controllers/adminController");
 
 router.use(protect);
@@ -17,6 +21,8 @@ router.use(authorizeRoles("admin"));
 
 // 🔍 Get all pending users
 router.get("/pending-users", getPendingUsers);
+router.get("/company-owners", getApprovedCompanyOwners);
+router.get("/truck-owners", getApprovedTruckOwners);
 
 // ✅ Approve user
 router.put("/approve/:id", approveUser);
@@ -37,4 +43,7 @@ router.get(
   authorizeRoles("admin"),
   getAllBookingsAdmin
 );
+router.get("/requirements", protect, authorizeRoles("admin"), getAllRequirements);
+router.get("/requirements/:requirementId/offers", protect, authorizeRoles("admin"), getRequirementOffersAdmin);
+
 module.exports = router;

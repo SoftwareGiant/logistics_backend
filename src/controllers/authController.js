@@ -273,7 +273,10 @@ exports.registerTruckOwner = async (req, res) => {
           password: d.password,
           role: "driver",
           truckOwnerId: ownerId,
-          assignedTruckId: d.assignedTruckId || null,
+          assignedTruckId:
+            typeof d.truckIndex === "number"
+              ? createdTrucks[d.truckIndex]?._id
+              : null,
           licenseNumber: d.licenseNumber,
           createdBy: ownerId,
         };

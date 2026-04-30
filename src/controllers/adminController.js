@@ -3,7 +3,19 @@ const Booking = require("../models/bookingModel");
 const Truck = require("../models/truckModel");
 const User = require("../models/userModel");
 const Company = require("../models/companyModel");
+const Requirement = require("../models/requirementModel");
+const Offer = require("../models/offerModel");
 
+const parsePagination = (query) => {
+  const page = Math.max(Number(query.page) || 1, 1);
+  const limit = Math.max(Number(query.limit) || 10, 1);
+
+  return {
+    page,
+    limit,
+    skip: (page - 1) * limit,
+  };
+};
 // ================= GET PENDING USERS =================
 
 exports.getPendingUsers = async (req, res) => {
@@ -233,6 +245,174 @@ exports.createAdmin = async (req, res) => {
   }
 };
 
+exports.getApprovedCompanyOwners = async (req, res) => {
+  try {
+    const { page, limit, skip } = parsePagination(req.query);
+
+    const query = {
+      role: "company",
+      verificationStatus: "approved",
+    };
+
+    const total = await User.countDocuments(query);
+
+    const owners = await User.find(query)
+      .select("-password")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const ownerIds = owners.map((owner) => owner._id);
+
+    const [companies, representatives] = await Promise.all([
+      Company.find({ userId: { $in: ownerIds } }).lean(),
+      User.find({
+        role: "company_staff",
+        verificationStatus: "approved",
+        createdBy: { $in: ownerIds },
+      })
+        .select("-password")
+        .sort({ createdAt: -1 })
+        .lean(),
+    ]);
+
+    const companyMap = new Map(
+      companies.map((company) => [company.userId.toString(), company])
+    );
+
+    const representativesByOwner = representatives.reduce((acc, rep) => {
+      const ownerId = rep.createdBy?.toString();
+
+      if (!ownerId) {
+        return acc;
+      }
+
+      if (!acc[ownerId]) {
+        acc[ownerId] = [];
+      }
+
+      acc[ownerId].push(rep);
+      return acc;
+    }, {});
+
+    const companyOwners = owners.map((owner) => {
+      const company = companyMap.get(owner._id.toString()) || null;
+      const representatives =
+        representativesByOwner[owner._id.toString()] ||
+        company?.representatives ||
+        [];
+
+      return {
+        owner,
+        company: company
+          ? {
+              ...company,
+              representatives,
+            }
+          : {
+              representatives,
+            },
+      };
+    });
+
+    res.json({
+      total,
+      page,
+      limit,
+      pages: Math.ceil(total / limit),
+      companyOwners,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
+exports.getApprovedTruckOwners = async (req, res) => {
+  try {
+    const { page, limit, skip } = parsePagination(req.query);
+
+    const query = {
+      role: "truck_owner",
+      verificationStatus: "approved",
+    };
+
+    const total = await User.countDocuments(query);
+
+    const owners = await User.find(query)
+      .select("-password")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const ownerIds = owners.map((owner) => owner._id);
+
+    const [trucks, drivers] = await Promise.all([
+      Truck.find({ ownerId: { $in: ownerIds } }).sort({ createdAt: -1 }).lean(),
+      User.find({
+        role: "driver",
+        verificationStatus: "approved",
+        truckOwnerId: { $in: ownerIds },
+      })
+        .select("-password")
+        .populate("assignedTruckId")
+        .sort({ createdAt: -1 })
+        .lean(),
+    ]);
+
+    const trucksByOwner = trucks.reduce((acc, truck) => {
+      const ownerId = truck.ownerId?.toString();
+
+      if (!ownerId) {
+        return acc;
+      }
+
+      if (!acc[ownerId]) {
+        acc[ownerId] = [];
+      }
+
+      acc[ownerId].push(truck);
+      return acc;
+    }, {});
+
+    const driversByOwner = drivers.reduce((acc, driver) => {
+      const ownerId = driver.truckOwnerId?.toString();
+
+      if (!ownerId) {
+        return acc;
+      }
+
+      if (!acc[ownerId]) {
+        acc[ownerId] = [];
+      }
+
+      acc[ownerId].push(driver);
+      return acc;
+    }, {});
+
+    const truckOwners = owners.map((owner) => ({
+      owner,
+      trucks: trucksByOwner[owner._id.toString()] || [],
+      drivers: driversByOwner[owner._id.toString()] || [],
+    }));
+
+    res.json({
+      total,
+      page,
+      limit,
+      pages: Math.ceil(total / limit),
+      truckOwners,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
 // exports.getDashboardStats = async (req, res) => {
 //   try {
 //     // ================= BASIC STATS =================
@@ -440,5 +620,144 @@ exports.getAllBookingsAdmin = async (req, res) => {
     res.status(500).json({
       message: error.message,
     });
+  }
+};
+
+exports.getAllRequirements = async (req, res) => {
+  try {
+    let { page = 1, limit = 10, status, search } = req.query;
+
+    page = Number(page);
+    limit = Number(limit);
+
+    let query = {};
+
+    if (status) query.status = status;
+
+    if (search) {
+      query.$or = [
+        { pickupCity: { $regex: search, $options: "i" } },
+        { dropCity: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const total = await Requirement.countDocuments(query);
+
+    const requirements = await Requirement.find(query)
+      .populate("companyId", "name email phone")
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean();
+
+    // 🔥 offer count
+    const ids = requirements.map((r) => r._id);
+
+    const offerCounts = await Offer.aggregate([
+      { $match: { requirementId: { $in: ids } } },
+      { $group: { _id: "$requirementId", count: { $sum: 1 } } },
+    ]);
+
+    const countMap = {};
+    offerCounts.forEach((o) => {
+      countMap[o._id] = o.count;
+    });
+
+    // 🔥 FINAL FORMAT (FULL DATA)
+    const data = requirements.map((r) => ({
+      _id: r._id,
+
+      // 📍 ROUTE
+      pickupCity: r.pickupCity,
+      dropCity: r.dropCity,
+
+      // 📦 DETAILS
+      goodsType: r.goodsType,
+      weight: r.weight,
+      truckType: r.truckType,
+      preferredDate: r.preferredDate,
+      additionalNotes: r.additionalNotes,
+
+      // 🏢 COMPANY
+      company: {
+        _id: r.companyId?._id,
+        name: r.companyId?.name,
+        email: r.companyId?.email,
+        phone: r.companyId?.phone,
+      },
+
+      // 📊 META
+      status: r.status,
+      offerCount: countMap[r._id] || 0,
+
+      createdAt: r.createdAt,
+    }));
+
+    res.json({
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      requirements: data,
+    });
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.getRequirementOffersAdmin = async (req, res) => {
+  try {
+    const { requirementId } = req.params;
+
+    const requirement = await Requirement.findById(requirementId);
+
+    if (!requirement) {
+      return res.status(404).json({ message: "Requirement not found" });
+    }
+
+    const offers = await Offer.find({ requirementId })
+      .populate("truckOwnerId", "name phone")
+      .populate("truckId")
+      .populate("driverId", "name phone")
+      .lean();
+
+    const formatted = offers.map((o) => {
+      const t = o.truckId;
+
+      const isReturn =
+        t.usualRoute.from === requirement.dropCity &&
+        t.usualRoute.to === requirement.pickupCity;
+
+      const price = isReturn
+        ? t.pricing.returnPrice
+        : t.pricing.normalPrice;
+
+      return {
+        _id: o._id,
+
+        truckOwner: o.truckOwnerId,
+        driver: o.driverId,
+
+        truckNumber: t.truckNumber,
+        capacity: t.capacity,
+        type: t.type,
+
+        isReturn,
+        price,
+        status: o.status,
+      };
+    });
+
+    res.json({
+      requirement: {
+        pickupCity: requirement.pickupCity,
+        dropCity: requirement.dropCity,
+        status: requirement.status,
+      },
+      offers: formatted,
+    });
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };
