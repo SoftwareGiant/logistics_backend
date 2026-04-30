@@ -413,6 +413,153 @@ exports.getApprovedTruckOwners = async (req, res) => {
   }
 };
 
+
+exports.getAllFleetStatus = async (req, res) => {
+  try {
+    let { page = 1, limit = 10, from, to, date } = req.query;
+
+    page = Number(page);
+    limit = Number(limit);
+
+    const skip = (page - 1) * limit;
+
+    // ================= FILTER QUERY =================
+    let truckQuery = {};
+
+    if (from) {
+      truckQuery["usualRoute.from"] = from.toLowerCase().trim();
+    }
+
+    if (to) {
+      truckQuery["usualRoute.to"] = to.toLowerCase().trim();
+    }
+
+    // ================= TOTAL =================
+    const total = await Truck.countDocuments(truckQuery);
+
+    const trucks = await Truck.find(truckQuery)
+      .populate("ownerId", "name phone verificationStatus")
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const truckIds = trucks.map((t) => t._id);
+
+    // ================= DATE FILTER =================
+    let bookingQuery = {
+      truckId: { $in: truckIds },
+      status: {
+        $in: ["assigned", "en_route", "picked_up", "in_transit"],
+      },
+    };
+
+    if (date) {
+      const d = new Date(date);
+
+      const start = new Date(d.setHours(0, 0, 0, 0));
+      const end = new Date(d.setHours(23, 59, 59, 999));
+
+      bookingQuery.pickupDate = { $gte: start, $lte: end };
+    }
+
+    const bookings = await Booking.find(bookingQuery)
+      .populate("companyId", "name")
+      .populate("driverId", "name phone")
+      .lean();
+
+    const bookingMap = {};
+    bookings.forEach((b) => {
+      bookingMap[b.truckId.toString()] = b;
+    });
+
+    // ================= FINAL DATA =================
+    const data = trucks.map((t) => {
+      const booking = bookingMap[t._id.toString()];
+      const currentCity = t.currentLocation?.city;
+
+      let status = "Available";
+      let tripType = "new";
+
+      let driver = null;
+      let company = null;
+      let goods = null;
+
+      if (booking) {
+        driver = booking.driverId || null;
+        company = booking.companyId || null;
+        goods = booking.goodsType || null;
+
+        status =
+          booking.status === "assigned" ? "Loading" : "In Transit";
+      }
+
+      const isAvailableForNewTrip =
+        t.availability === "available" &&
+        currentCity === t.usualRoute.from;
+
+      const isAvailableForReturnTrip =
+        t.availability === "busy" &&
+        currentCity !== t.usualRoute.from;
+
+      if (isAvailableForReturnTrip) tripType = "return";
+
+      return {
+        _id: t._id,
+
+        truckNumber: t.truckNumber,
+        type: t.type,
+        capacity: t.capacity,
+
+        currentLocation: currentCity,
+
+        route: {
+          from: t.usualRoute.from,
+          to: t.usualRoute.to,
+        },
+
+        owner: {
+          name: t.ownerId?.name,
+          phone: t.ownerId?.phone,
+          verified: t.ownerId?.verificationStatus === "approved",
+        },
+
+        driver: driver
+          ? {
+              name: driver.name,
+              phone: driver.phone,
+            }
+          : null,
+
+        company: company ? { name: company.name } : null,
+
+        goodsType: goods,
+
+        status,
+        availability: t.availability,
+
+        isAvailableForNewTrip,
+        isAvailableForReturnTrip,
+        tripType,
+      };
+    });
+
+    res.json({
+      success: true,
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      filters: { from, to, date },
+      data,
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
+
 // exports.getDashboardStats = async (req, res) => {
 //   try {
 //     // ================= BASIC STATS =================

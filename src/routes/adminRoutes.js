@@ -13,6 +13,7 @@ const {
   getAllBookingsAdmin,
     getAllRequirements,
   getRequirementOffersAdmin,
+  getAllFleetStatus,
 } = require("../controllers/adminController");
 
 router.use(protect);
@@ -45,5 +46,10 @@ router.get(
 );
 router.get("/requirements", protect, authorizeRoles("admin"), getAllRequirements);
 router.get("/requirements/:requirementId/offers", protect, authorizeRoles("admin"), getRequirementOffersAdmin);
-
+router.get(
+  "/fleet",
+  protect,
+  authorizeRoles("admin"),
+  getAllFleetStatus
+);
 module.exports = router;
