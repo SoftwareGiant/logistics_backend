@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const { getOwnerDashboardStats } = require("../controllers/ownerController");
+const { getOwnerDashboardStats, getAvailableTruckDriverPairs } = require("../controllers/ownerController");
 const { protect } = require("../middlewares/authMiddleware");
 const { authorizeRoles } = require("../middlewares/roleMiddleware");
 
@@ -11,5 +11,10 @@ router.get(
   authorizeRoles("truck_owner"),
   getOwnerDashboardStats
 );
-
+router.get(
+  "/available-pairs",
+  protect,
+  authorizeRoles("truck_owner"),
+  getAvailableTruckDriverPairs
+);
 module.exports = router;
