@@ -18,6 +18,89 @@ const parsePagination = (query) => {
 };
 // ================= GET PENDING USERS =================
 
+// exports.getPendingUsers = async (req, res) => {
+//   try {
+//     let { page = 1, limit = 10, role } = req.query;
+
+//     page = Number(page);
+//     limit = Number(limit);
+
+//     // ================= FILTER =================
+//     let query = {
+//       verificationStatus: "pending",
+//       role: { $in: ["company", "truck_owner"] },
+//     };
+
+//     if (role && ["company", "truck_owner"].includes(role)) {
+//       query.role = role;
+//     }
+
+//     const total = await User.countDocuments(query);
+
+//     const users = await User.find(query)
+//       .select("-password")
+//       .sort({ createdAt: -1 })
+//       .skip((page - 1) * limit)
+//       .limit(limit)
+//       .lean();
+
+//     // ================= ENRICH DATA =================
+//     const enrichedUsers = await Promise.all(
+//       users.map(async (user) => {
+
+//         // ================= COMPANY =================
+//         if (user.role === "company") {
+//           const company = await Company.findOne({
+//             userId: user._id,
+//           }).lean();
+
+//           return {
+//             ...user,
+//             companyDetails: {
+//               location: company?.location?.city || "N/A",
+//               gstNumber: company?.gstNumber || "N/A",
+//               representativesCount: company?.representatives?.length || 0,
+//             },
+//           };
+//         }
+
+//         // ================= TRUCK OWNER =================
+//         if (user.role === "truck_owner") {
+//           const trucksCount = await Truck.countDocuments({
+//             ownerId: user._id,
+//           });
+
+//           const driversCount = await User.countDocuments({
+//             truckOwnerId: user._id,
+//             role: "driver",
+//           });
+
+//           return {
+//             ...user,
+//             ownerDetails: {
+//               trucksCount,
+//               driversCount,
+//             },
+//           };
+//         }
+
+//         return user;
+//       })
+//     );
+
+//     res.json({
+//       total,
+//       page,
+//       pages: Math.ceil(total / limit),
+//       users: enrichedUsers,
+//     });
+
+//   } catch (error) {
+//     res.status(500).json({
+//       message: error.message,
+//     });
+//   }
+// };
 exports.getPendingUsers = async (req, res) => {
   try {
     let { page = 1, limit = 10, role } = req.query;
@@ -25,7 +108,6 @@ exports.getPendingUsers = async (req, res) => {
     page = Number(page);
     limit = Number(limit);
 
-    // ================= FILTER =================
     let query = {
       verificationStatus: "pending",
       role: { $in: ["company", "truck_owner"] },
@@ -44,7 +126,7 @@ exports.getPendingUsers = async (req, res) => {
       .limit(limit)
       .lean();
 
-    // ================= ENRICH DATA =================
+    // ================= ENRICH =================
     const enrichedUsers = await Promise.all(
       users.map(async (user) => {
 
@@ -56,30 +138,56 @@ exports.getPendingUsers = async (req, res) => {
 
           return {
             ...user,
+
             companyDetails: {
-              location: company?.location?.city || "N/A",
-              gstNumber: company?.gstNumber || "N/A",
-              representativesCount: company?.representatives?.length || 0,
+              companyName: company?.companyName,
+              gstNumber: company?.gstNumber,
+
+              location: {
+                city: company?.location?.city,
+                state: company?.location?.state,
+                coordinates: company?.location?.coordinates,
+              },
+
+              // 🔥 FULL REPRESENTATIVES
+              representatives: company?.representatives || [],
             },
           };
         }
 
         // ================= TRUCK OWNER =================
         if (user.role === "truck_owner") {
-          const trucksCount = await Truck.countDocuments({
-            ownerId: user._id,
-          });
 
-          const driversCount = await User.countDocuments({
+          const trucks = await Truck.find({
+            ownerId: user._id,
+          }).lean();
+
+          const drivers = await User.find({
             truckOwnerId: user._id,
             role: "driver",
+          })
+            .select("-password")
+            .lean();
+
+          // 🔥 map driver to truck
+          const driverMap = {};
+          drivers.forEach((d) => {
+            if (d.assignedTruckId) {
+              driverMap[d.assignedTruckId.toString()] = d;
+            }
           });
+
+          const trucksWithDrivers = trucks.map((t) => ({
+            ...t,
+            driver: driverMap[t._id.toString()] || null,
+          }));
 
           return {
             ...user,
+
             ownerDetails: {
-              trucksCount,
-              driversCount,
+              trucks: trucksWithDrivers, // 🔥 FULL TRUCK + DRIVER
+              drivers, // 🔥 ALL DRIVERS
             },
           };
         }
@@ -101,7 +209,6 @@ exports.getPendingUsers = async (req, res) => {
     });
   }
 };
-
 // ================= APPROVE USER =================
 exports.approveUser = async (req, res) => {
   const session = await mongoose.startSession();
@@ -510,7 +617,7 @@ exports.getAllFleetStatus = async (req, res) => {
         type: t.type,
         capacity: t.capacity,
 
-        currentLocation: currentCity,
+        currentLocation: t.currentLocation,
 
         route: {
           from: t.usualRoute.from,
