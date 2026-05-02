@@ -25,6 +25,11 @@ if (req.user.role === "company") {
 } else if (req.user.role === "company_staff") {
   companyId = req.user.companyId;
 }
+
+    if (!companyId) {
+      throw new Error(`Unauthorized role for creating bookings: ${req.user.role}`);
+    }
+
     if (!truckId || !pickupCity || !dropCity) {
       throw new Error("Required fields missing");
     }
