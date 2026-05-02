@@ -42,3 +42,30 @@ exports.getMyRequirements = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+// 🗑️ Delete Requirement
+exports.deleteRequirement = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const companyId = req.user._id;
+
+    // 🔍 Find requirement
+    const requirement = await Requirement.findById(id);
+
+    if (!requirement) {
+      return res.status(404).json({ message: "Requirement not found" });
+    }
+
+    // ✅ Check if requirement belongs to the company
+    if (requirement.companyId.toString() !== companyId.toString()) {
+      return res.status(403).json({ message: "Unauthorized to delete this requirement" });
+    }
+
+    // 🗑️ Delete requirement
+    await Requirement.findByIdAndDelete(id);
+
+    res.json({ message: "Requirement deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
