@@ -28,6 +28,20 @@ exports.searchTrucks = async (req, res) => {
       })
       .lean();
 
+    const truckIds = trucks.map((t) => t._id);
+
+    const activeBookings = await Booking.find({
+      truckId: { $in: truckIds },
+      status: {
+        $in: ["assigned", "en_route", "picked_up", "in_transit"],
+      },
+    }).lean();
+
+    const bookingMap = {};
+    activeBookings.forEach((b) => {
+      bookingMap[b.truckId.toString()] = b;
+    });
+
     let returnTrucks = [];
     let newTripTrucks = [];
 
@@ -36,25 +50,33 @@ exports.searchTrucks = async (req, res) => {
       if (t.ownerId?.verificationStatus !== "approved") return;
 
       const currentCity = t.currentLocation?.city;
+      const activeBooking = bookingMap[t._id.toString()];
+      const hasActiveBooking = Boolean(activeBooking);
+      const activeBookingIsNewTrip =
+        activeBooking &&
+        activeBooking.pickupCity === t.usualRoute.from &&
+        activeBooking.dropCity === t.usualRoute.to;
 
       const isNewTrip =
         t.usualRoute.from === pickup &&
         t.usualRoute.to === drop &&
         currentCity === pickup &&
-        t.availability === "available";
+        t.availability === "available" &&
+        !hasActiveBooking;
 
-      const isReturn =
+      const isReverseRoute =
         t.usualRoute.from === drop &&
         t.usualRoute.to === pickup;
 
-      const isReadyForReturn =
-        isReturn &&
+      const isTruckAtPickup =
         currentCity === pickup &&
         t.availability === "available";
 
-      const isRunningReturn =
-        isReturn &&
-        t.availability === "busy";
+      const isReturn =
+        isReverseRoute && (isTruckAtPickup || activeBookingIsNewTrip);
+
+      const isReadyForReturn = isReturn && isTruckAtPickup;
+      const isRunningReturn = isReturn && activeBookingIsNewTrip;
 
       if (!isReturn && !isNewTrip) return;
 

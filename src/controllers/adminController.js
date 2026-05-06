@@ -853,11 +853,10 @@ exports.getAllBookingsAdmin = async (req, res) => {
     // ================= QUERY =================
     const total = await Booking.countDocuments(query);
 
-    const bookings = await Booking.find(query)
-      .populate("companyId", "companyName")
+const bookings = await Booking.find(query)
+      .populate("companyId", "name phone email  ")
       .populate("truckId", "truckNumber type capacity")
       .populate("driverId", "name phone")
-      .populate("truckOwnerId", "name phone")
       .sort(sortOption)
       .skip((page - 1) * limit)
       .limit(limit);
