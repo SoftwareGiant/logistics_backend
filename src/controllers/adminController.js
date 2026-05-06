@@ -18,89 +18,6 @@ const parsePagination = (query) => {
 };
 // ================= GET PENDING USERS =================
 
-// exports.getPendingUsers = async (req, res) => {
-//   try {
-//     let { page = 1, limit = 10, role } = req.query;
-
-//     page = Number(page);
-//     limit = Number(limit);
-
-//     // ================= FILTER =================
-//     let query = {
-//       verificationStatus: "pending",
-//       role: { $in: ["company", "truck_owner"] },
-//     };
-
-//     if (role && ["company", "truck_owner"].includes(role)) {
-//       query.role = role;
-//     }
-
-//     const total = await User.countDocuments(query);
-
-//     const users = await User.find(query)
-//       .select("-password")
-//       .sort({ createdAt: -1 })
-//       .skip((page - 1) * limit)
-//       .limit(limit)
-//       .lean();
-
-//     // ================= ENRICH DATA =================
-//     const enrichedUsers = await Promise.all(
-//       users.map(async (user) => {
-
-//         // ================= COMPANY =================
-//         if (user.role === "company") {
-//           const company = await Company.findOne({
-//             userId: user._id,
-//           }).lean();
-
-//           return {
-//             ...user,
-//             companyDetails: {
-//               location: company?.location?.city || "N/A",
-//               gstNumber: company?.gstNumber || "N/A",
-//               representativesCount: company?.representatives?.length || 0,
-//             },
-//           };
-//         }
-
-//         // ================= TRUCK OWNER =================
-//         if (user.role === "truck_owner") {
-//           const trucksCount = await Truck.countDocuments({
-//             ownerId: user._id,
-//           });
-
-//           const driversCount = await User.countDocuments({
-//             truckOwnerId: user._id,
-//             role: "driver",
-//           });
-
-//           return {
-//             ...user,
-//             ownerDetails: {
-//               trucksCount,
-//               driversCount,
-//             },
-//           };
-//         }
-
-//         return user;
-//       })
-//     );
-
-//     res.json({
-//       total,
-//       page,
-//       pages: Math.ceil(total / limit),
-//       users: enrichedUsers,
-//     });
-
-//   } catch (error) {
-//     res.status(500).json({
-//       message: error.message,
-//     });
-//   }
-// };
 exports.getPendingUsers = async (req, res) => {
   try {
     let { page = 1, limit = 10, role } = req.query;
@@ -209,6 +126,248 @@ exports.getPendingUsers = async (req, res) => {
     });
   }
 };
+
+exports.getApprovedUsers = async (req, res) => {
+  try {
+    let { page = 1, limit = 10, role } = req.query;
+
+    page = Number(page);
+    limit = Number(limit);
+
+    if (Number.isNaN(page) || page < 1) page = 1;
+    if (Number.isNaN(limit) || limit < 1) limit = 10;
+
+    // Latest -> oldest (pagination must be consistent, so sort in DB)
+    const query = {
+      verificationStatus: "approved",
+      role: { $in: ["company", "truck_owner"] },
+    };
+
+    if (role && ["company", "truck_owner"].includes(role)) {
+      query.role = role;
+    }
+
+    const total = await User.countDocuments(query);
+
+    const users = await User.find(query)
+      .select("-password")
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean();
+
+    // ================= ENRICH =================
+    const enrichedUsers = await Promise.all(
+      users.map(async (user) => {
+
+        // ================= COMPANY =================
+        if (user.role === "company") {
+
+          const company = await Company.findOne({
+            userId: user._id,
+          }).lean();
+
+          const dbRepresentatives = await User.find({
+            role: "company_staff",
+            createdBy: user._id,
+          })
+            .select("-password")
+            .lean();
+
+          const representatives = dbRepresentatives.length > 0 ? dbRepresentatives : (company?.representatives || []);
+
+          return {
+            ...user,
+
+            companyDetails: {
+              companyName: company?.companyName,
+              gstNumber: company?.gstNumber,
+
+              location: {
+                city: company?.location?.city,
+                state: company?.location?.state,
+                coordinates: company?.location?.coordinates,
+              },
+
+              representatives,
+            },
+          };
+        }
+
+        // ================= TRUCK OWNER =================
+        if (user.role === "truck_owner") {
+
+          const trucks = await Truck.find({
+            ownerId: user._id,
+          }).lean();
+
+          const drivers = await User.find({
+            truckOwnerId: user._id,
+            role: "driver",
+          })
+            .select("-password")
+            .populate("assignedTruckId")
+            .lean();
+
+          const driverMap = {};
+
+          drivers.forEach((d) => {
+            if (d.assignedTruckId) {
+              driverMap[d.assignedTruckId.toString()] = d;
+            }
+          });
+
+          const trucksWithDrivers = trucks.map((t) => ({
+            ...t,
+            driver: driverMap[t._id.toString()] || null,
+          }));
+
+          return {
+            ...user,
+
+            ownerDetails: {
+              trucks: trucksWithDrivers,
+              drivers,
+            },
+          };
+        }
+
+        return user;
+      })
+    );
+
+    res.json({
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      users: enrichedUsers,
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+exports.getRejectedUsers = async (req, res) => {
+  try {
+    let { page = 1, limit = 10, role } = req.query;
+
+    page = Number(page);
+    limit = Number(limit);
+
+    let query = {
+      verificationStatus: "rejected",
+      role: { $in: ["company", "truck_owner"] },
+    };
+
+    if (role && ["company", "truck_owner"].includes(role)) {
+      query.role = role;
+    }
+
+    const total = await User.countDocuments(query);
+
+    const users = await User.find(query)
+      .select("-password")
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean();
+
+    // ================= ENRICH =================
+    const enrichedUsers = await Promise.all(
+      users.map(async (user) => {
+
+        // ================= COMPANY =================
+        if (user.role === "company") {
+
+          const company = await Company.findOne({
+            userId: user._id,
+          }).lean();
+
+          const dbRepresentatives = await User.find({
+            role: "company_staff",
+            createdBy: user._id,
+          })
+            .select("-password")
+            .lean();
+
+          const representatives = dbRepresentatives.length > 0 ? dbRepresentatives : (company?.representatives || []);
+
+          return {
+            ...user,
+
+            companyDetails: {
+              companyName: company?.companyName,
+              gstNumber: company?.gstNumber,
+
+              location: {
+                city: company?.location?.city,
+                state: company?.location?.state,
+                coordinates: company?.location?.coordinates,
+              },
+
+              representatives,
+            },
+          };
+        }
+
+        // ================= TRUCK OWNER =================
+        if (user.role === "truck_owner") {
+
+          const trucks = await Truck.find({
+            ownerId: user._id,
+          }).lean();
+
+          const drivers = await User.find({
+            truckOwnerId: user._id,
+            role: "driver",
+          })
+            .select("-password")
+            .populate("assignedTruckId")
+            .lean();
+
+          const driverMap = {};
+
+          drivers.forEach((d) => {
+            if (d.assignedTruckId) {
+              driverMap[d.assignedTruckId.toString()] = d;
+            }
+          });
+
+          const trucksWithDrivers = trucks.map((t) => ({
+            ...t,
+            driver: driverMap[t._id.toString()] || null,
+          }));
+
+          return {
+            ...user,
+
+            ownerDetails: {
+              trucks: trucksWithDrivers,
+              drivers,
+            },
+          };
+        }
+
+        return user;
+      })
+    );
+
+    res.json({
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      users: enrichedUsers,
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
 // ================= APPROVE USER =================
 exports.approveUser = async (req, res) => {
   const session = await mongoose.startSession();
@@ -784,7 +943,7 @@ exports.getDashboardStats = async (req, res) => {
 
     const approvedToday = await User.countDocuments({
       verificationStatus: "approved",
-      updatedAt: { $gte: todayStart, $lte: todayEnd },
+      // updatedAt: { $gte: todayStart, $lte: todayEnd },
       role: { $in: ["company", "truck_owner"] },
     });
 

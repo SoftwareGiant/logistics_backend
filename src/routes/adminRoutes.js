@@ -14,6 +14,8 @@ const {
     getAllRequirements,
   getRequirementOffersAdmin,
   getAllFleetStatus,
+  getRejectedUsers,
+  getApprovedUsers,
 } = require("../controllers/adminController");
 
 router.use(protect);
@@ -22,6 +24,8 @@ router.use(authorizeRoles("admin"));
 
 // 🔍 Get all pending users
 router.get("/pending-users", getPendingUsers);
+router.get("/rejected-users", getRejectedUsers);
+router.get("/approved-users", getApprovedUsers);
 router.get("/company-owners", getApprovedCompanyOwners);
 router.get("/truck-owners", getApprovedTruckOwners);
 
