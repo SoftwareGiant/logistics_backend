@@ -99,6 +99,20 @@ exports.createOffer = async (req, res) => {
   }
 };
 
+// 💰 Owner → View My Offers
+exports.getMyOffers = async (req, res) => {
+  try {
+    const offers = await Offer.find({ truckOwnerId: req.user._id })
+      .populate("requirementId")
+      .populate("truckId")
+      .sort({ createdAt: -1 });
+
+    res.json({ offers });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 // 📦 Company → View offers (AUTO PRICE)
 exports.getRequirementOffers = async (req, res) => {
   try {
@@ -133,5 +147,94 @@ exports.getRequirementOffers = async (req, res) => {
     res.json({ offers: data });
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+};
+
+// 🤝 Company → Accept Offer
+const mongoose = require("mongoose");
+
+exports.acceptOffer = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { offerId } = req.params;
+
+    const offer = await Offer.findById(offerId)
+      .populate("truckId")
+      .populate("requirementId");
+
+    if (!offer) {
+      return res.status(404).json({ message: "Offer not found" });
+    }
+
+    const requirement = offer.requirementId;
+
+    if (!requirement) {
+       return res.status(404).json({ message: "Associated requirement not found" });
+    }
+
+    if (requirement.companyId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+
+    if (requirement.status !== "active") {
+      return res.status(400).json({ message: "Requirement already fulfilled or inactive" });
+    }
+
+    const t = offer.truckId;
+    const isReturn =
+      t.usualRoute.from === requirement.dropCity &&
+      t.usualRoute.to === requirement.pickupCity;
+    const price = isReturn ? t.pricing.returnPrice : t.pricing.normalPrice;
+
+    // 1. Create Booking
+    const [booking] = await Booking.create(
+      [
+        {
+          companyId: req.user._id,
+          truckId: t._id,
+          driverId: offer.driverId,
+          pickupCity: requirement.pickupCity,
+          dropCity: requirement.dropCity,
+          goodsType: requirement.goodsType,
+          weight: requirement.weight,
+          pickupDate: requirement.preferredDate,
+          price,
+          isReturnTrip: isReturn,
+          status: "assigned", 
+        },
+      ],
+      { session }
+    );
+
+    // 2. Update Offer Status
+    offer.status = "accepted";
+    await offer.save({ session });
+
+    // 3. Update Requirement Status
+    requirement.status = "fulfilled";
+    await requirement.save({ session });
+
+    // 4. Reject other offers
+    await Offer.updateMany(
+      { requirementId: requirement._id, _id: { $ne: offerId } },
+      { status: "rejected" },
+      { session }
+    );
+
+    // 5. Mark truck as busy
+    t.availability = "busy";
+    await t.save({ session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.json({ message: "Offer accepted and booking created", booking });
+
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    res.status(500).json({ message: error.message });
   }
 };
