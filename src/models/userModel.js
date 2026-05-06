@@ -59,10 +59,7 @@ const userSchema = new mongoose.Schema(
       ref: "Truck",
     },
 
-    licenseNumber: {
-      type: String,
-      trim: true,
-    },
+
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

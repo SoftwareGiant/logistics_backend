@@ -277,7 +277,6 @@ exports.registerTruckOwner = async (req, res) => {
             typeof d.truckIndex === "number"
               ? createdTrucks[d.truckIndex]?._id
               : null,
-          licenseNumber: d.licenseNumber,
           createdBy: ownerId,
         };
       });
