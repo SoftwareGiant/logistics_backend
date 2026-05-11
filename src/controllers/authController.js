@@ -261,12 +261,27 @@ exports.registerTruckOwner = async (req, res) => {
     let createdDrivers = [];
 
     if (drivers.length > 0) {
-      const driverDocs = drivers.map((d, index) => {
+      const driverDocs = [];
+
+      for (let i = 0; i < drivers.length; i++) {
+        const d = drivers[i];
+
+        // Ensure driver data is valid
         if (!d.name || (!d.email && !d.phone) || !d.password) {
-          throw new Error(`Invalid driver data at index ${index}`);
+          throw new Error(`Invalid driver data at index ${i}`);
         }
 
-        return {
+        // Prevent Duplicate Drivers
+        const existingDriver = await User.findOne({
+          $or: [{ email: d.email }, { phone: d.phone }],
+        }).session(session);
+
+        if (existingDriver) {
+          throw new Error(`Driver with this email/phone already exists at index ${i}`);
+        }
+
+        // Push to array (plain text password is fine here, hook will catch it)
+        driverDocs.push({
           name: d.name,
           email: d.email,
           phone: d.phone,
@@ -278,10 +293,11 @@ exports.registerTruckOwner = async (req, res) => {
               ? createdTrucks[d.truckIndex]?._id
               : null,
           createdBy: ownerId,
-        };
-      });
+        });
+      }
 
-      createdDrivers = await User.insertMany(driverDocs, { session });
+      // User.create() iterates through the array and triggers pre("save") for EACH driver
+      createdDrivers = await User.create(driverDocs, { session });
     }
 
     await session.commitTransaction();
