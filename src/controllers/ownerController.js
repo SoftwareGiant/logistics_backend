@@ -1,5 +1,6 @@
 const Booking = require("../models/bookingModel");
 const Truck = require("../models/truckModel");
+const User = require("../models/userModel");
 
 exports.getOwnerDashboardStats = async (req, res) => {
   try {
@@ -62,19 +63,12 @@ exports.getAvailableTruckDriverPairs = async (req, res) => {
     const ownerId = req.user._id;
     const { date } = req.query;
 
-    if (!date) {
-      return res.status(400).json({
-        message: "date is required",
-      });
-    }
-
-    const d = new Date(date);
+    const d = date ? new Date(date) : new Date();
     const start = new Date(d.setHours(0, 0, 0, 0));
     const end = new Date(d.setHours(23, 59, 59, 999));
 
     // ================= GET DATA =================
     const trucks = await Truck.find({ ownerId }).lean();
-
     const drivers = await User.find({
       truckOwnerId: ownerId,
       role: "driver",
@@ -114,16 +108,17 @@ exports.getAvailableTruckDriverPairs = async (req, res) => {
     // ================= FINAL FILTER =================
     const availablePairs = trucks
       .filter((t) => {
-        const isTruckFree = !bookedTruckIds.has(t._id.toString());
-        const driver = driverMap[t._id.toString()];
+        const truckIdStr = t._id.toString();
+        const isTruckFree = !bookedTruckIds.has(truckIdStr);
+        const driver = driverMap[truckIdStr];
         const isDriverFree =
           driver && !bookedDriverIds.has(driver._id.toString());
 
         // 🔥 allow both:
         // ✔ new trip (available)
         // ✔ return trip (busy but running)
-        const isEligible =
-          t.availability === "available" || t.availability === "busy";
+        const status = t.availability || "available";
+        const isEligible = status === "available" || status === "busy";
 
         return isTruckFree && isDriverFree && isEligible;
       })
@@ -131,20 +126,15 @@ exports.getAvailableTruckDriverPairs = async (req, res) => {
         const driver = driverMap[t._id.toString()];
         const currentCity = t.currentLocation?.city;
 
-        // 🔥 detect return
         const isReturn =
           t.availability === "busy" &&
-          currentCity !== t.usualRoute.from;
+          currentCity !== t.usualRoute?.from;
 
         return {
           _id: t._id,
-
-          // 🔥 UI LABEL (IMPORTANT)
           label: `${t.truckNumber} • ${driver?.name || "No Driver"} • ${
             isReturn ? "Return" : "New"
           }`,
-
-          // 🚛 truck
           truck: {
             _id: t._id,
             truckNumber: t.truckNumber,
@@ -153,8 +143,6 @@ exports.getAvailableTruckDriverPairs = async (req, res) => {
             route: t.usualRoute,
             currentLocation: currentCity,
           },
-
-          // 👨‍✈️ driver
           driver: driver
             ? {
                 _id: driver._id,
@@ -162,8 +150,6 @@ exports.getAvailableTruckDriverPairs = async (req, res) => {
                 phone: driver.phone,
               }
             : null,
-
-          // 🔥 type
           tripType: isReturn ? "return" : "new",
         };
       });
@@ -172,10 +158,11 @@ exports.getAvailableTruckDriverPairs = async (req, res) => {
       success: true,
       date,
       total: availablePairs.length,
-      data: availablePairs,
+      pairs: availablePairs,
     });
 
   } catch (error) {
+    console.error("[ERROR] getAvailableTruckDriverPairs:", error);
     res.status(500).json({
       message: error.message,
     });
