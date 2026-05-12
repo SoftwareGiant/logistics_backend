@@ -1137,8 +1137,8 @@ exports.getRequirementOffersAdmin = async (req, res) => {
       const t = o.truckId;
 
       const isReturn =
-        t.usualRoute.from === requirement.dropCity &&
-        t.usualRoute.to === requirement.pickupCity;
+        t.usualRoute.from === requirement.dropCity.city &&
+        t.usualRoute.to === requirement.pickupCity.city;
 
       const price = isReturn
         ? t.pricing.returnPrice

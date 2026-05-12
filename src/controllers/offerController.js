@@ -8,8 +8,8 @@ exports.getMatchingRequirements = async (req, res) => {
     const trucks = await Truck.find({ ownerId: req.user._id });
 
     const routes = trucks.map(t => ({
-      pickupCity: t.usualRoute.from,
-      dropCity: t.usualRoute.to,
+      "pickupCity.city": t.usualRoute.from,
+      "dropCity.city": t.usualRoute.to,
     }));
 
     const requirements = await Requirement.find({
@@ -128,8 +128,8 @@ exports.getRequirementOffers = async (req, res) => {
       const t = o.truckId;
 
       const isReturn =
-        t.usualRoute.from === requirement.dropCity &&
-        t.usualRoute.to === requirement.pickupCity;
+        t.usualRoute.from === requirement.dropCity.city &&
+        t.usualRoute.to === requirement.pickupCity.city;
 
       const price = isReturn
         ? t.pricing.returnPrice
@@ -190,8 +190,8 @@ exports.acceptOffer = async (req, res) => {
 
     const t = offer.truckId;
     const isReturn =
-      t.usualRoute.from === requirement.dropCity &&
-      t.usualRoute.to === requirement.pickupCity;
+      t.usualRoute.from === requirement.dropCity.city &&
+      t.usualRoute.to === requirement.pickupCity.city;
     const price = isReturn ? t.pricing.returnPrice : t.pricing.normalPrice;
 
     // 1. Create Booking
