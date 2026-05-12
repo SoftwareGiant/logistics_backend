@@ -69,3 +69,34 @@ exports.deleteRequirement = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+// 📈 Popular Routes (Aggregated from requirements)
+exports.getPopularRoutes = async (req, res) => {
+  try {
+    const popularRoutes = await Requirement.aggregate([
+      {
+        $group: {
+          _id: {
+            from: "$pickupCity.city",
+            to: "$dropCity.city"
+          },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1 } },
+      { $limit: 5 }
+    ]);
+
+    const formattedRoutes = popularRoutes
+      .filter(r => r._id.from && r._id.to)
+      .map(r => ({
+        from: r._id.from,
+        to: r._id.to,
+        count: r.count
+      }));
+
+    res.json({ routes: formattedRoutes });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
