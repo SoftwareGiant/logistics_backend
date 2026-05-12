@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const bcrypt = require("bcrypt");
 
 const User = require("../models/userModel");
 const Company = require("../models/companyModel");
@@ -74,8 +75,6 @@ exports.registerCompany = async (req, res) => {
     let repDocsForCompany = [];
 
     if (representatives.length > 0) {
-      const repDocs = [];
-
       for (let i = 0; i < representatives.length; i++) {
         const rep = representatives[i];
 
@@ -92,14 +91,22 @@ exports.registerCompany = async (req, res) => {
           throw new Error(`Representative already exists at index ${i}`);
         }
 
-        repDocs.push({
-          name: rep.name,
-          email: rep.email,
-          phone: rep.phone,
-          password: rep.password,
-          role: "company_staff",
-          createdBy: ownerId,
-        });
+        // 🔥 use create() so pre-save hook runs for password hashing
+        const [createdRep] = await User.create(
+          [
+            {
+              name: rep.name,
+              email: rep.email,
+              phone: rep.phone,
+              password: rep.password, // 🔥 will be hashed by pre-save hook
+              role: "company_staff",
+              createdBy: ownerId,
+            },
+          ],
+          { session }
+        );
+
+        createdRepresentatives.push(createdRep);
 
         // 🔥 prepare for company schema
         repDocsForCompany.push({
@@ -108,8 +115,6 @@ exports.registerCompany = async (req, res) => {
           phone: rep.phone,
         });
       }
-
-      createdRepresentatives = await User.insertMany(repDocs, { session });
     }
 
     // ================= 🏢 CREATE COMPANY =================
@@ -261,27 +266,35 @@ exports.registerTruckOwner = async (req, res) => {
     let createdDrivers = [];
 
     if (drivers.length > 0) {
-      const driverDocs = drivers.map((d, index) => {
+      for (let i = 0; i < drivers.length; i++) {
+        const d = drivers[i];
+
         if (!d.name || (!d.email && !d.phone) || !d.password) {
-          throw new Error(`Invalid driver data at index ${index}`);
+          throw new Error(`Invalid driver data at index ${i}`);
         }
 
-        return {
-          name: d.name,
-          email: d.email,
-          phone: d.phone,
-          password: d.password,
-          role: "driver",
-          truckOwnerId: ownerId,
-          assignedTruckId:
-            typeof d.truckIndex === "number"
-              ? createdTrucks[d.truckIndex]?._id
-              : null,
-          createdBy: ownerId,
-        };
-      });
+        // 🔥 use create() instead of insertMany() so pre-save hook runs for password hashing
+        const [driver] = await User.create(
+          [
+            {
+              name: d.name,
+              email: d.email,
+              phone: d.phone,
+              password: d.password, // 🔥 will be hashed by pre-save hook
+              role: "driver",
+              truckOwnerId: ownerId,
+              assignedTruckId:
+                typeof d.truckIndex === "number"
+                  ? createdTrucks[d.truckIndex]?._id
+                  : null,
+              createdBy: ownerId,
+            },
+          ],
+          { session }
+        );
 
-      createdDrivers = await User.insertMany(driverDocs, { session });
+        createdDrivers.push(driver);
+      }
     }
 
     await session.commitTransaction();
