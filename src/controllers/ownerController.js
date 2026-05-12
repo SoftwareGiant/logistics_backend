@@ -1,10 +1,7 @@
 const Booking = require("../models/bookingModel");
 const Truck = require("../models/truckModel");
 const User = require("../models/userModel");
-<<<<<<< HEAD
 const bcrypt = require("bcrypt");
-=======
->>>>>>> d9f1304950a173e0f832da6ecc026f8dd20b9d50
 
 exports.getOwnerDashboardStats = async (req, res) => {
   try {
