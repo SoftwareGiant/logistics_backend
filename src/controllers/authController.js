@@ -266,13 +266,23 @@ exports.registerTruckOwner = async (req, res) => {
     let createdDrivers = [];
 
     if (drivers.length > 0) {
+<<<<<<< HEAD
       for (let i = 0; i < drivers.length; i++) {
         const d = drivers[i];
 
+=======
+      const driverDocs = [];
+
+      for (let i = 0; i < drivers.length; i++) {
+        const d = drivers[i];
+
+        // Ensure driver data is valid
+>>>>>>> d9f1304950a173e0f832da6ecc026f8dd20b9d50
         if (!d.name || (!d.email && !d.phone) || !d.password) {
           throw new Error(`Invalid driver data at index ${i}`);
         }
 
+<<<<<<< HEAD
         // 🔥 use create() instead of insertMany() so pre-save hook runs for password hashing
         const [driver] = await User.create(
           [
@@ -295,6 +305,35 @@ exports.registerTruckOwner = async (req, res) => {
 
         createdDrivers.push(driver);
       }
+=======
+        // Prevent Duplicate Drivers
+        const existingDriver = await User.findOne({
+          $or: [{ email: d.email }, { phone: d.phone }],
+        }).session(session);
+
+        if (existingDriver) {
+          throw new Error(`Driver with this email/phone already exists at index ${i}`);
+        }
+
+        // Push to array (plain text password is fine here, hook will catch it)
+        driverDocs.push({
+          name: d.name,
+          email: d.email,
+          phone: d.phone,
+          password: d.password,
+          role: "driver",
+          truckOwnerId: ownerId,
+          assignedTruckId:
+            typeof d.truckIndex === "number"
+              ? createdTrucks[d.truckIndex]?._id
+              : null,
+          createdBy: ownerId,
+        });
+      }
+
+      // User.create() iterates through the array and triggers pre("save") for EACH driver
+      createdDrivers = await User.create(driverDocs, { session });
+>>>>>>> d9f1304950a173e0f832da6ecc026f8dd20b9d50
     }
 
     await session.commitTransaction();

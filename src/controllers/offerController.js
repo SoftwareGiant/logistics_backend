@@ -165,20 +165,26 @@ exports.acceptOffer = async (req, res) => {
       .populate("requirementId");
 
     if (!offer) {
+      console.log("[ACCEPT_OFFER] Offer not found:", offerId);
       return res.status(404).json({ message: "Offer not found" });
     }
 
     const requirement = offer.requirementId;
 
     if (!requirement) {
+       console.log("[ACCEPT_OFFER] Requirement not found for offer:", offerId);
        return res.status(404).json({ message: "Associated requirement not found" });
     }
 
+    console.log(`[ACCEPT_OFFER] Company ${req.user._id} attempting to accept offer ${offerId} for requirement ${requirement._id}`);
+
     if (requirement.companyId.toString() !== req.user._id.toString()) {
+      console.log(`[ACCEPT_OFFER] Auth mismatch: req.companyId(${requirement.companyId}) !== user.id(${req.user._id})`);
       return res.status(403).json({ message: "Unauthorized" });
     }
 
     if (requirement.status !== "active") {
+      console.log(`[ACCEPT_OFFER] Requirement not active. Status: ${requirement.status}`);
       return res.status(400).json({ message: "Requirement already fulfilled or inactive" });
     }
 
@@ -224,6 +230,7 @@ exports.acceptOffer = async (req, res) => {
     );
 
     // 5. Mark truck as busy
+    if (t.type === "Open Body") t.type = "open";
     t.availability = "busy";
     await t.save({ session });
 

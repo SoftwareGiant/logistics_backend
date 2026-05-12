@@ -18,7 +18,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/trucks", truckRoutes);
 app.use("/api/bookings", bookingRoutes);
-app.use("/api/owner", ownerRoutes);
+app.use("/api/owners", ownerRoutes);
 app.use("/api/requirements", requirementRoutes);
 app.use("/api/offers", offerRoutes);
 // Health check
