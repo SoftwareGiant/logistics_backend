@@ -387,7 +387,7 @@ exports.getDriverTripHistory = async (req, res) => {
     const total = await Booking.countDocuments(query);
 
     const bookings = await Booking.find(query)
-      .populate("truckId", "truckNumber type")
+      .populate("truckId")
       .populate("companyId", "name phone")
       .sort(sortOption)
       .skip((page - 1) * limit)
