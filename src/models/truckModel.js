@@ -106,6 +106,11 @@ currentLocation: {
       type: String,
       enum: ["available", "busy"],
       default: "available"
+    },
+
+    isReturnTripReady: {
+      type: Boolean,
+      default: false
     }
   },
   { timestamps: true }

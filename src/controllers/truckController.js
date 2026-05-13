@@ -73,7 +73,8 @@ exports.searchTrucks = async (req, res) => {
         t.availability === "available";
 
       const isReturn =
-        isReverseRoute && (isTruckAtPickup || activeBookingIsNewTrip);
+        (isReverseRoute && (isTruckAtPickup || activeBookingIsNewTrip)) ||
+        (t.isReturnTripReady && isTruckAtPickup && t.usualRoute.from === drop);
 
       const isReadyForReturn = isReturn && isTruckAtPickup;
       const isRunningReturn = isReturn && activeBookingIsNewTrip;

@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Booking = require("../models/bookingModel");
 const Truck = require("../models/truckModel");
 const User = require("../models/userModel");
+const Requirement = require("../models/requirementModel");
 
 // ================= CREATE BOOKING =================
 exports.createBooking = async (req, res) => {
@@ -399,6 +400,82 @@ exports.getDriverTripHistory = async (req, res) => {
       bookings,
     });
 
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+exports.getReturnTripMatches = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const driverId = req.user._id;
+
+    const booking = await Booking.findById(bookingId);
+
+    if (!booking) {
+      return res.status(404).json({ message: 'Booking not found' });
+    }
+
+    // ?? driver check
+    if (!booking.driverId || booking.driverId.toString() !== driverId.toString()) {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    // Swapping locations for return trip
+    const returnPickup = booking.dropCity.toLowerCase().trim();
+    const returnDrop = booking.pickupCity.toLowerCase().trim();
+
+    // Find active requirements that match the return route
+    const requirements = await Requirement.find({
+      status: 'active',
+      'pickupCity.city': returnPickup,
+      'dropCity.city': returnDrop,
+    }).populate('companyId', 'name phone');
+
+    res.json({
+      returnPickup,
+      returnDrop,
+      matches: requirements,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
+exports.selectReturnTrip = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const driverId = req.user._id;
+
+    const booking = await Booking.findById(bookingId);
+
+    if (!booking) {
+      return res.status(404).json({ message: 'Booking not found' });
+    }
+
+    // ?? driver check
+    if (!booking.driverId || booking.driverId.toString() !== driverId.toString()) {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    if (booking.status !== 'delivered') {
+      return res.status(400).json({ message: 'Trip must be delivered first' });
+    }
+
+    // Update truck state
+    await Truck.findByIdAndUpdate(booking.truckId, {
+      isReturnTripReady: true,
+      currentLocation: {
+        city: booking.dropCity,
+      }
+    });
+
+    res.json({
+      message: 'Return trip signaled. Locations interchanged for companies.',
+    });
   } catch (error) {
     res.status(500).json({
       message: error.message,
