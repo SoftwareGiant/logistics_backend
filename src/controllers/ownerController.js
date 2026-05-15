@@ -251,9 +251,9 @@ exports.addDriver = async (req, res) => {
     const { name, email, phone, password, truckId } = req.body;
 
     // 🔍 validation
-    if (!name || (!email && !phone) || !password) {
+    if (!name || !phone || !password) {
       return res.status(400).json({
-        message: "Name, (email or phone), and password are required",
+        message: "Driver name, phone number, and password are required",
       });
     }
 
@@ -346,9 +346,9 @@ exports.addTruckWithDriver = async (req, res) => {
     }
 
     // 🔍 driver validation
-    if (!driver || !driver.name || (!driver.email && !driver.phone) || !driver.password) {
+    if (!driver || !driver.name || !driver.phone || !driver.password) {
       return res.status(400).json({
-        message: "Driver fields required: name, (email or phone), password",
+        message: "Driver name, phone number, and password are required",
       });
     }
 
@@ -466,9 +466,9 @@ exports.addMultipleTrucksAndDrivers = async (req, res) => {
 
     // 🔍 validate drivers
     drivers.forEach((d, index) => {
-      if (!d.name || (!d.email && !d.phone) || !d.password) {
+      if (!d.name || !d.phone || !d.password) {
         throw new Error(
-          `Invalid driver data at index ${index}: name, (email or phone), and password required`
+          `Invalid driver data at index ${index}: name, phone number, and password required`
         );
       }
 

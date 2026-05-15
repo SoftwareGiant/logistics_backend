@@ -269,8 +269,8 @@ exports.registerTruckOwner = async (req, res) => {
       for (let i = 0; i < drivers.length; i++) {
         const d = drivers[i];
 
-        if (!d.name || (!d.email && !d.phone) || !d.password) {
-          throw new Error(`Invalid driver data at index ${i}`);
+        if (!d.name || !d.phone || !d.password) {
+          throw new Error(`Name, phone number, and password are required for driver at index ${i}`);
         }
 
         // 🔥 use create() instead of insertMany() so pre-save hook runs for password hashing
