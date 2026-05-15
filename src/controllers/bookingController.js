@@ -35,9 +35,20 @@ if (req.user.role === "company") {
       throw new Error("Required fields missing");
     }
 
-    // normalize
-    const pickup = pickupCity.toLowerCase().trim();
-    const drop = dropCity.toLowerCase().trim();
+    // normalize helper
+    const normalizeLoc = (loc) => {
+      if (typeof loc === "string") {
+        return {
+          city: loc.toLowerCase().trim(),
+          address: loc,
+          coordinates: { coordinates: [0, 0] },
+        };
+      }
+      return loc;
+    };
+
+    const pickup = normalizeLoc(pickupCity);
+    const drop = normalizeLoc(dropCity);
 
     // 🔍 find truck
     const truck = await Truck.findById(truckId).session(session);
@@ -50,8 +61,8 @@ if (req.user.role === "company") {
 
     // 🔥 detect return trip
     const isReturn =
-      truck.usualRoute.from === drop &&
-      truck.usualRoute.to === pickup;
+      truck.usualRoute.from === drop.city &&
+      truck.usualRoute.to === pickup.city;
 
     // 💰 pricing (backend trusted)
     const price = isReturn
@@ -210,6 +221,18 @@ exports.updateBookingByDriver = async (req, res) => {
     // 🔄 update status
     booking.status = status;
 
+    // 🔥 Normalize legacy data if it exists
+    const normalize = (loc) => {
+      if (typeof loc === "string") {
+        if (loc.startsWith("{")) {
+          try { return JSON.parse(loc); } catch (e) { return loc; }
+        }
+      }
+      return loc;
+    };
+    booking.pickupCity = normalize(booking.pickupCity);
+    booking.dropCity = normalize(booking.dropCity);
+
     // 🕒 timestamps
     if (status === "en_route") {
       booking.enRouteAt = new Date();
@@ -234,7 +257,9 @@ exports.updateBookingByDriver = async (req, res) => {
       // 🚛 truck free + update location
       await Truck.findByIdAndUpdate(booking.truckId, {
         availability: "available",
-        currentLocation: booking.dropCity,
+        currentLocation: {
+          city: booking.dropCity,
+        },
       });
     }
 

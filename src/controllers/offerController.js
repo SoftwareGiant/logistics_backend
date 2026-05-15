@@ -7,20 +7,34 @@ exports.getMatchingRequirements = async (req, res) => {
   try {
     const trucks = await Truck.find({ ownerId: req.user._id });
 
+    // Helper to get normalized city string from either a string or location object
+    const getCityStr = (loc) => {
+      if (!loc) return "";
+      if (typeof loc === "string") return loc.toLowerCase().trim();
+      if (typeof loc === "object" && loc.city) return loc.city.toLowerCase().trim();
+      return "";
+    };
+
     // 1. Usual Route matches
     const usualRoutes = trucks.map(t => ({
-      "pickupCity.city": t.usualRoute.from,
-      "dropCity.city": t.usualRoute.to,
+      "pickupCity.city": { $regex: new RegExp(`^${t.usualRoute.from}$|^${t.usualRoute.from},`, "i") },
+      "dropCity.city": { $regex: new RegExp(`^${t.usualRoute.to}$|^${t.usualRoute.to},`, "i") },
     }));
 
     // 2. Current Location matches (Return Trip)
     // If a truck is available at its drop location, it's looking for a load back to its base
     const returnRoutes = trucks
       .filter(t => t.availability === "available" && t.currentLocation)
-      .map(t => ({
-        "pickupCity.city": t.currentLocation.toLowerCase(),
-        "dropCity.city": t.usualRoute.from.toLowerCase(),
-      }));
+      .map(t => {
+        const city = getCityStr(t.currentLocation);
+        if (!city) return null;
+        
+        return {
+          "pickupCity.city": { $regex: new RegExp(`^${city}$|^${city},`, "i") },
+          "dropCity.city": { $regex: new RegExp(`^${t.usualRoute.from}$|^${t.usualRoute.from},`, "i") },
+        };
+      })
+      .filter(Boolean);
 
     const requirements = await Requirement.find({
       status: "active",

@@ -1,5 +1,6 @@
 const Truck = require("../models/truckModel");
 const Booking = require("../models/bookingModel");
+const User = require("../models/userModel");
 
 // ================= SEARCH TRUCKS =================
 exports.searchTrucks = async (req, res) => {
@@ -120,6 +121,42 @@ exports.searchTrucks = async (req, res) => {
   }
 };
 
+exports.updateTruckLocation = async (req, res) => {
+  try {
+    const { coordinates, city } = req.body; // coordinates: [lng, lat]
+    const driver = await User.findById(req.user._id);
+
+    if (!driver || !driver.assignedTruckId) {
+      return res.status(400).json({
+        message: "No truck assigned to this driver",
+      });
+    }
+
+    const updateData = {
+      "currentLocation.coordinates": coordinates,
+    };
+
+    if (city) {
+      updateData["currentLocation.city"] = city.toLowerCase();
+    }
+
+    const truck = await Truck.findByIdAndUpdate(
+      driver.assignedTruckId,
+      updateData,
+      { new: true }
+    );
+
+    res.json({
+      message: "Location updated",
+      currentLocation: truck.currentLocation,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
 
 exports.getOwnerFleet = async (req, res) => {
   try {
@@ -127,6 +164,15 @@ exports.getOwnerFleet = async (req, res) => {
 
     // 🔥 get all trucks of owner
     const trucks = await Truck.find({ ownerId }).lean();
+
+    // 🔥 get drivers of this owner
+    const drivers = await User.find({ truckOwnerId: ownerId, role: "driver" }).lean();
+    const driverMap = {};
+    drivers.forEach(d => {
+      if (d.assignedTruckId) {
+        driverMap[d.assignedTruckId.toString()] = d;
+      }
+    });
 
     // 🔥 get active bookings for those trucks
     const truckIds = trucks.map((t) => t._id);
@@ -147,6 +193,7 @@ exports.getOwnerFleet = async (req, res) => {
     // 🔥 prepare response
     const fleet = trucks.map((t) => {
       const booking = bookingMap[t._id.toString()];
+      const driver = driverMap[t._id.toString()];
 
       let status = "Available";
       let destination = null;
@@ -175,6 +222,7 @@ exports.getOwnerFleet = async (req, res) => {
         destination,
 
         availability: t.availability,
+        driver: driver ? { name: driver.name, phone: driver.phone } : null,
       };
     });
 

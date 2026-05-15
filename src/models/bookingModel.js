@@ -1,5 +1,37 @@
 const mongoose = require("mongoose");
 
+const locationSchema = new mongoose.Schema(
+  {
+    city: {
+      type: String,
+      required: true,
+      lowercase: true,
+      trim: true,
+    },
+    state: {
+      type: String,
+      lowercase: true,
+      trim: true,
+    },
+    address: {
+      type: String,
+      trim: true,
+    },
+    coordinates: {
+      type: {
+        type: String,
+        enum: ["Point"],
+        default: "Point",
+      },
+      coordinates: {
+        type: [Number], // [longitude, latitude]
+        required: true,
+      },
+    },
+  },
+  { _id: false }
+);
+
 const bookingSchema = new mongoose.Schema(
   {
     companyId: {
@@ -20,15 +52,13 @@ const bookingSchema = new mongoose.Schema(
     },
 
     pickupCity: {
-      type: String,
+      type: mongoose.Schema.Types.Mixed,
       required: true,
-      lowercase: true,
     },
 
     dropCity: {
-      type: String,
+      type: mongoose.Schema.Types.Mixed,
       required: true,
-      lowercase: true,
     },
 
     goodsType: String,

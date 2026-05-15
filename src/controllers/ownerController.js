@@ -590,3 +590,58 @@ exports.addMultipleTrucksAndDrivers = async (req, res) => {
     });
   }
 };
+
+exports.updateFleetItem = async (req, res) => {
+  try {
+    const ownerId = req.user._id;
+    const { truckId } = req.params;
+    const {
+      truckNumber,
+      capacity,
+      type,
+      usualRoute,
+      pricing,
+      driverName,
+      driverPhone,
+    } = req.body;
+
+    // 1. Update Truck
+    const truckUpdate = {};
+    if (truckNumber) truckUpdate.truckNumber = truckNumber.toUpperCase().trim();
+    if (capacity) truckUpdate.capacity = capacity;
+    if (type) truckUpdate.type = type;
+    if (usualRoute) {
+      truckUpdate.usualRoute = {
+        from: usualRoute.from?.toLowerCase().trim(),
+        to: usualRoute.to?.toLowerCase().trim(),
+      };
+    }
+    if (pricing) truckUpdate.pricing = pricing;
+
+    const truck = await Truck.findOneAndUpdate(
+      { _id: truckId, ownerId },
+      truckUpdate,
+      { new: true }
+    );
+
+    if (!truck) {
+      return res.status(404).json({ message: "Truck not found" });
+    }
+
+    // 2. Update Driver (if exists)
+    if (driverName || driverPhone) {
+      const driverUpdate = {};
+      if (driverName) driverUpdate.name = driverName;
+      if (driverPhone) driverUpdate.phone = driverPhone;
+
+      await User.findOneAndUpdate(
+        { assignedTruckId: truckId, truckOwnerId: ownerId, role: "driver" },
+        driverUpdate
+      );
+    }
+
+    res.json({ message: "Fleet item updated successfully", truck });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};

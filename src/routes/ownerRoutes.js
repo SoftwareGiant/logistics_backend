@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const { getOwnerDashboardStats, getAvailableTruckDriverPairs, addTruck, addDriver, addTruckWithDriver, addMultipleTrucksAndDrivers } = require("../controllers/ownerController");
+const { getOwnerDashboardStats, getAvailableTruckDriverPairs, addTruck, addDriver, addTruckWithDriver, addMultipleTrucksAndDrivers, updateFleetItem } = require("../controllers/ownerController");
 const { protect } = require("../middlewares/authMiddleware");
 const { authorizeRoles } = require("../middlewares/roleMiddleware");
 
@@ -48,6 +48,14 @@ router.post(
   protect,
   authorizeRoles("truck_owner"),
   addMultipleTrucksAndDrivers
+);
+
+// 🛠️ edit fleet
+router.put(
+  "/fleet/:truckId",
+  protect,
+  authorizeRoles("truck_owner"),
+  updateFleetItem
 );
 
 module.exports = router;
