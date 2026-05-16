@@ -111,6 +111,11 @@ currentLocation: {
     isReturnTripReady: {
       type: Boolean,
       default: false
+    },
+
+    images: {
+      type: [String],
+      default: []
     }
   },
   { timestamps: true }

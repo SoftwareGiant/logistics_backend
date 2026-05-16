@@ -806,6 +806,7 @@ exports.getAllFleetStatus = async (req, res) => {
         isAvailableForNewTrip,
         isAvailableForReturnTrip,
         tripType,
+        images: t.images || [],
       };
     });
 

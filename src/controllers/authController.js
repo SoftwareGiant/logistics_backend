@@ -257,6 +257,7 @@ exports.registerTruckOwner = async (req, res) => {
             returnPrice: t.pricing.returnPrice,
           },
           availability: "available",
+          images: Array.isArray(t.images) ? t.images : [],
         };
       });
 

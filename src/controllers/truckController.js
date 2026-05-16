@@ -100,6 +100,7 @@ exports.searchTrucks = async (req, res) => {
         isNewTrip,
         isReadyForReturn,
         isRunningReturn,
+        images: t.images || [],
       };
 
       if (isReturn) returnTrucks.push(formatted);

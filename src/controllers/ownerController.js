@@ -181,6 +181,7 @@ exports.addTruck = async (req, res) => {
       usualRoute,
       currentLocation,
       pricing,
+      images,
     } = req.body;
 
     // 🔍 validation
@@ -231,6 +232,7 @@ exports.addTruck = async (req, res) => {
         returnPrice: pricing.returnPrice,
       },
       availability: "available",
+      images: Array.isArray(images) ? images : [],
     });
 
     res.status(201).json({
@@ -327,6 +329,7 @@ exports.addTruckWithDriver = async (req, res) => {
       currentLocation,
       pricing,
       driver,
+      images,
     } = req.body;
 
     // 🔍 truck validation
@@ -402,6 +405,7 @@ exports.addTruckWithDriver = async (req, res) => {
         returnPrice: pricing.returnPrice,
       },
       availability: "available",
+      images: Array.isArray(images) ? images : [],
     });
 
     // 👨‍✈️ create driver with truck assignment
@@ -543,6 +547,7 @@ exports.addMultipleTrucksAndDrivers = async (req, res) => {
         returnPrice: t.pricing.returnPrice,
       },
       availability: "available",
+      images: Array.isArray(t.images) ? t.images : [],
     }));
 
     const createdTrucks = await Truck.insertMany(truckDocs);
@@ -603,6 +608,7 @@ exports.updateFleetItem = async (req, res) => {
       pricing,
       driverName,
       driverPhone,
+      images,
     } = req.body;
 
     // 1. Update Truck
@@ -617,6 +623,7 @@ exports.updateFleetItem = async (req, res) => {
       };
     }
     if (pricing) truckUpdate.pricing = pricing;
+    if (images && Array.isArray(images)) truckUpdate.images = images;
 
     const truck = await Truck.findOneAndUpdate(
       { _id: truckId, ownerId },

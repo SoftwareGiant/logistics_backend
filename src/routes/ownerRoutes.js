@@ -2,8 +2,11 @@ const express = require("express");
 const router = express.Router();
 
 const { getOwnerDashboardStats, getAvailableTruckDriverPairs, addTruck, addDriver, addTruckWithDriver, addMultipleTrucksAndDrivers, updateFleetItem } = require("../controllers/ownerController");
+const { uploadMiddleware, uploadImages } = require("../controllers/uploadController");
 const { protect } = require("../middlewares/authMiddleware");
 const { authorizeRoles } = require("../middlewares/roleMiddleware");
+
+router.post("/upload-images", uploadMiddleware, uploadImages);
 
 router.get(
   "/dashboard",
