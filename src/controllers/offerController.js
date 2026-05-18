@@ -165,6 +165,7 @@ exports.getRequirementOffers = async (req, res) => {
         driver: o.driverId,
         isReturn,
         price,
+        averageTime: t.usualRoute?.averageTime,
       };
     });
 

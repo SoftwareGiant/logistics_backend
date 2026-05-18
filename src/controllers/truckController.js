@@ -90,6 +90,7 @@ exports.searchTrucks = async (req, res) => {
 
         from: t.usualRoute.from,
         to: t.usualRoute.to,
+        averageTime: t.usualRoute.averageTime,
         currentLocation: currentCity,
 
         price: isReturn
@@ -216,6 +217,7 @@ exports.getOwnerFleet = async (req, res) => {
         truckNumber: t.truckNumber,
         capacity: t.capacity,
         type: t.type,
+        usualRoute: t.usualRoute,
 
         currentLocation: t.currentLocation,
 

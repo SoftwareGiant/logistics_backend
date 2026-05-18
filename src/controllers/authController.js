@@ -244,6 +244,7 @@ exports.registerTruckOwner = async (req, res) => {
           usualRoute: {
             from: t.usualRoute.from.toLowerCase().trim(),
             to: t.usualRoute.to.toLowerCase().trim(),
+            averageTime: t.usualRoute.averageTime ? t.usualRoute.averageTime.trim() : undefined,
           },
           currentLocation: {
             city: t.currentLocation?.city

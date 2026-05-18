@@ -220,6 +220,7 @@ exports.addTruck = async (req, res) => {
       usualRoute: {
         from: usualRoute.from.toLowerCase().trim(),
         to: usualRoute.to.toLowerCase().trim(),
+        averageTime: usualRoute.averageTime ? usualRoute.averageTime.trim() : undefined,
       },
       currentLocation: {
         city: currentLocation?.city
@@ -393,6 +394,7 @@ exports.addTruckWithDriver = async (req, res) => {
       usualRoute: {
         from: usualRoute.from.toLowerCase().trim(),
         to: usualRoute.to.toLowerCase().trim(),
+        averageTime: usualRoute.averageTime ? usualRoute.averageTime.trim() : undefined,
       },
       currentLocation: {
         city: currentLocation?.city
@@ -535,6 +537,7 @@ exports.addMultipleTrucksAndDrivers = async (req, res) => {
       usualRoute: {
         from: t.usualRoute.from.toLowerCase().trim(),
         to: t.usualRoute.to.toLowerCase().trim(),
+        averageTime: t.usualRoute.averageTime ? t.usualRoute.averageTime.trim() : undefined,
       },
       currentLocation: {
         city: t.currentLocation?.city
@@ -620,6 +623,7 @@ exports.updateFleetItem = async (req, res) => {
       truckUpdate.usualRoute = {
         from: usualRoute.from?.toLowerCase().trim(),
         to: usualRoute.to?.toLowerCase().trim(),
+        averageTime: usualRoute.averageTime?.trim(),
       };
     }
     if (pricing) truckUpdate.pricing = pricing;

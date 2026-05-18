@@ -75,6 +75,10 @@ const truckSchema = new mongoose.Schema(
         type: String,
         lowercase: true,
         trim: true
+      },
+      averageTime: {
+        type: String,
+        trim: true
       }
     },
 
