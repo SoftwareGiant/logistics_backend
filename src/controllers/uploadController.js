@@ -5,9 +5,9 @@ const path = require("path");
 
 // Configure cloudinary
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || "demo",
-  api_key: process.env.CLOUDINARY_API_KEY || "123456789012345",
-  api_secret: process.env.CLOUDINARY_API_SECRET || "abc123abc123abc123abc123abc",
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
 // Use disk storage for multer temporary files

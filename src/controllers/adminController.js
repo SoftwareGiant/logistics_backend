@@ -807,6 +807,7 @@ exports.getAllFleetStatus = async (req, res) => {
         isAvailableForReturnTrip,
         tripType,
         images: t.images || [],
+        pricing: t.pricing || { normalPrice: 0, returnPrice: 0 },
       };
     });
 
@@ -1151,9 +1152,12 @@ exports.getRequirementOffersAdmin = async (req, res) => {
         truckOwner: o.truckOwnerId,
         driver: o.driverId,
 
-        truckNumber: t.truckNumber,
-        capacity: t.capacity,
-        type: t.type,
+        truck: {
+          _id: t._id,
+          truckNumber: t.truckNumber,
+          capacity: t.capacity,
+          type: t.type,
+        },
 
         isReturn,
         price,
@@ -1163,10 +1167,17 @@ exports.getRequirementOffersAdmin = async (req, res) => {
 
     res.json({
       requirement: {
+        _id: requirement._id,
         pickupCity: requirement.pickupCity,
         dropCity: requirement.dropCity,
+        goodsType: requirement.goodsType,
+        weight: requirement.weight,
+        truckType: requirement.truckType,
+        preferredDate: requirement.preferredDate,
         status: requirement.status,
       },
+      total: formatted.length,
+      data: formatted,
       offers: formatted,
     });
 
