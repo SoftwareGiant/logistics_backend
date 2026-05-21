@@ -89,6 +89,16 @@ currentLocation: {
     type: [Number] // [lng, lat]
   }
 },
+    pendingLocation: {
+      city: {
+        type: String,
+        lowercase: true,
+        trim: true
+      },
+      coordinates: {
+        type: [Number]
+      }
+    },
     // 🕓 Last completed trip (for return matching)
     lastTrip: {
       from: String,

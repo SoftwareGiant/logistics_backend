@@ -220,12 +220,15 @@ exports.getOwnerFleet = async (req, res) => {
         usualRoute: t.usualRoute,
 
         currentLocation: t.currentLocation,
+        pendingLocation: t.pendingLocation,
 
         status,
         destination,
 
         availability: t.availability,
         driver: driver ? { name: driver.name, phone: driver.phone } : null,
+        pricing: t.pricing,
+        images: t.images || [],
       };
     });
 

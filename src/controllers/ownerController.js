@@ -1,6 +1,7 @@
 const Booking = require("../models/bookingModel");
 const Truck = require("../models/truckModel");
 const User = require("../models/userModel");
+const Offer = require("../models/offerModel");
 const bcrypt = require("bcrypt");
 
 exports.getOwnerDashboardStats = async (req, res) => {
@@ -612,7 +613,29 @@ exports.updateFleetItem = async (req, res) => {
       driverName,
       driverPhone,
       images,
+      currentLocation,
     } = req.body;
+
+    const oldTruck = await Truck.findOne({ _id: truckId, ownerId });
+    if (!oldTruck) {
+      return res.status(404).json({ message: "Truck not found" });
+    }
+
+    let routeChanged = false;
+    if (usualRoute) {
+      const oldFrom = oldTruck.usualRoute?.from?.toLowerCase().trim() || "";
+      const oldTo = oldTruck.usualRoute?.to?.toLowerCase().trim() || "";
+      const newFrom = usualRoute.from?.toLowerCase().trim() || "";
+      const newTo = usualRoute.to?.toLowerCase().trim() || "";
+      
+      if (oldFrom !== newFrom || oldTo !== newTo) {
+        routeChanged = true;
+      }
+    }
+
+    if (routeChanged) {
+      await Offer.deleteMany({ truckId, status: "pending" });
+    }
 
     // 1. Update Truck
     const truckUpdate = {};
@@ -629,6 +652,27 @@ exports.updateFleetItem = async (req, res) => {
     if (pricing) truckUpdate.pricing = pricing;
     if (images && Array.isArray(images)) truckUpdate.images = images;
 
+    let isOccupied = false;
+    if (currentLocation) {
+      const activeBooking = await Booking.findOne({
+        truckId,
+        status: { $in: ["assigned", "en_route", "picked_up", "in_transit"] }
+      });
+
+      const formattedLocation = {
+        city: currentLocation.city ? currentLocation.city.toLowerCase().trim() : "",
+        coordinates: currentLocation.coordinates || [0, 0]
+      };
+
+      if (activeBooking || oldTruck.availability === "busy") {
+        isOccupied = true;
+        truckUpdate.pendingLocation = formattedLocation;
+      } else {
+        truckUpdate.currentLocation = formattedLocation;
+        truckUpdate.pendingLocation = null;
+      }
+    }
+
     const truck = await Truck.findOneAndUpdate(
       { _id: truckId, ownerId },
       truckUpdate,
@@ -639,19 +683,53 @@ exports.updateFleetItem = async (req, res) => {
       return res.status(404).json({ message: "Truck not found" });
     }
 
-    // 2. Update Driver (if exists)
-    if (driverName || driverPhone) {
-      const driverUpdate = {};
-      if (driverName) driverUpdate.name = driverName;
-      if (driverPhone) driverUpdate.phone = driverPhone;
+    // 2. Update Driver
+    const currentDriver = await User.findOne({ assignedTruckId: truckId, role: "driver" });
 
-      await User.findOneAndUpdate(
-        { assignedTruckId: truckId, truckOwnerId: ownerId, role: "driver" },
-        driverUpdate
-      );
+    if (driverName || driverPhone) {
+      if (currentDriver) {
+        // Update existing driver
+        if (driverName) currentDriver.name = driverName;
+        if (driverPhone) currentDriver.phone = driverPhone;
+        await currentDriver.save();
+      } else {
+        // No driver is currently assigned to this truck.
+        // Check if there is an existing driver with this phone number
+        let existingDriver = null;
+        if (driverPhone) {
+          existingDriver = await User.findOne({ phone: driverPhone, role: "driver" });
+        }
+        
+        if (existingDriver) {
+          // Assign this existing driver to the truck
+          existingDriver.assignedTruckId = truckId;
+          existingDriver.truckOwnerId = ownerId;
+          if (driverName) existingDriver.name = driverName;
+          await existingDriver.save();
+        } else {
+          // Create a new driver
+          const defaultPassword = driverPhone && driverPhone.length >= 6 ? driverPhone : "driver123";
+          await User.create({
+            name: driverName || "Driver",
+            phone: driverPhone,
+            password: defaultPassword,
+            role: "driver",
+            truckOwnerId: ownerId,
+            assignedTruckId: truckId,
+            createdBy: ownerId,
+            verificationStatus: "approved"
+          });
+        }
+      }
+    } else if (driverName === "" && driverPhone === "") {
+      // Both fields cleared -> unassign driver
+      if (currentDriver) {
+        currentDriver.assignedTruckId = undefined;
+        await currentDriver.save();
+      }
     }
 
-    res.json({ message: "Fleet item updated successfully", truck });
+    res.json({ message: "Fleet item updated successfully", truck, isOccupied });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

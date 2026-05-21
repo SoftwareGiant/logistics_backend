@@ -1185,3 +1185,40 @@ exports.getRequirementOffersAdmin = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+exports.updateTruckPricing = async (req, res) => {
+  try {
+    const { truckId } = req.params;
+    const { normalPrice, returnPrice } = req.body;
+
+    if (normalPrice === undefined || returnPrice === undefined) {
+      return res.status(400).json({ message: "Both normalPrice and returnPrice are required" });
+    }
+
+    const nPrice = Number(normalPrice);
+    const rPrice = Number(returnPrice);
+
+    if (isNaN(nPrice) || isNaN(rPrice) || nPrice < 0 || rPrice < 0) {
+      return res.status(400).json({ message: "Pricing values must be valid non-negative numbers" });
+    }
+
+    const truck = await Truck.findById(truckId);
+    if (!truck) {
+      return res.status(404).json({ message: "Truck not found" });
+    }
+
+    truck.pricing = {
+      normalPrice: nPrice,
+      returnPrice: rPrice
+    };
+
+    await truck.save();
+
+    res.json({
+      message: "Truck pricing updated successfully",
+      truck
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};

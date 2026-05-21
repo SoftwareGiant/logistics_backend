@@ -16,6 +16,7 @@ const {
   getAllFleetStatus,
   getRejectedUsers,
   getApprovedUsers,
+  updateTruckPricing,
 } = require("../controllers/adminController");
 
 router.use(protect);
@@ -56,4 +57,12 @@ router.get(
   authorizeRoles("admin"),
   getAllFleetStatus
 );
+
+router.put(
+  "/trucks/:truckId/pricing",
+  protect,
+  authorizeRoles("admin"),
+  updateTruckPricing
+);
+
 module.exports = router;

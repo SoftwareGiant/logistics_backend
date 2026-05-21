@@ -255,12 +255,24 @@ exports.updateBookingByDriver = async (req, res) => {
       booking.deliveredAt = new Date();
 
       // 🚛 truck free + update location
-      await Truck.findByIdAndUpdate(booking.truckId, {
+      const truck = await Truck.findById(booking.truckId);
+      const updateData = {
         availability: "available",
-        currentLocation: {
+      };
+
+      if (truck && truck.pendingLocation && truck.pendingLocation.city) {
+        updateData.currentLocation = {
+          city: truck.pendingLocation.city,
+          coordinates: truck.pendingLocation.coordinates || [0, 0]
+        };
+        updateData.pendingLocation = null;
+      } else {
+        updateData.currentLocation = {
           city: booking.dropCity,
-        },
-      });
+        };
+      }
+
+      await Truck.findByIdAndUpdate(booking.truckId, updateData);
     }
 
     await booking.save();
