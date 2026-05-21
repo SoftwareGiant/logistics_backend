@@ -83,12 +83,12 @@ const truckSchema = new mongoose.Schema(
     },
 
     // 📍 CURRENT LIVE LOCATION
-currentLocation: {
-  city: String,
-  coordinates: {
-    type: [Number] // [lng, lat]
-  }
-},
+    currentLocation: {
+      city: String,
+      coordinates: {
+        type: [Number] // [lng, lat]
+      }
+    },
     pendingLocation: {
       city: {
         type: String,

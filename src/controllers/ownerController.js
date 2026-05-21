@@ -448,9 +448,9 @@ exports.addMultipleTrucksAndDrivers = async (req, res) => {
     const { trucks = [], drivers = [] } = req.body;
 
     // 🔍 validation
-    if (trucks.length === 0 || drivers.length === 0) {
+    if (trucks.length === 0) {
       return res.status(400).json({
-        message: "At least 1 truck and 1 driver required",
+        message: "At least 1 truck required",
       });
     }
 
@@ -471,26 +471,28 @@ exports.addMultipleTrucksAndDrivers = async (req, res) => {
       }
     });
 
-    // 🔍 validate drivers
-    drivers.forEach((d, index) => {
-      if (!d.name || !d.phone || !d.password) {
-        throw new Error(
-          `Invalid driver data at index ${index}: name, phone number, and password required`
-        );
-      }
+    // 🔍 validate drivers (only if drivers are provided)
+    if (drivers && drivers.length > 0) {
+      drivers.forEach((d, index) => {
+        if (!d.name || !d.phone || !d.password) {
+          throw new Error(
+            `Invalid driver data at index ${index}: name, phone number, and password required`
+          );
+        }
 
-      if (d.password.length < 6) {
-        throw new Error(
-          `Driver at index ${index}: password must be at least 6 characters`
-        );
-      }
+        if (d.password.length < 6) {
+          throw new Error(
+            `Driver at index ${index}: password must be at least 6 characters`
+          );
+        }
 
-      if (typeof d.truckIndex !== "number" || d.truckIndex >= trucks.length) {
-        throw new Error(
-          `Driver at index ${index}: invalid truckIndex (must be 0-${trucks.length - 1})`
-        );
-      }
-    });
+        if (typeof d.truckIndex !== "number" || d.truckIndex >= trucks.length) {
+          throw new Error(
+            `Driver at index ${index}: invalid truckIndex (must be 0-${trucks.length - 1})`
+          );
+        }
+      });
+    }
 
     // 🔍 check duplicate truck numbers
     const truckNumbers = trucks.map((t) => t.truckNumber.toUpperCase());
@@ -506,27 +508,29 @@ exports.addMultipleTrucksAndDrivers = async (req, res) => {
       });
     }
 
-    // 🔍 check duplicate driver emails/phones
-    const driverEmails = drivers
-      .filter((d) => d.email)
-      .map((d) => d.email);
-    const driverPhones = drivers
-      .filter((d) => d.phone)
-      .map((d) => d.phone);
+    // 🔍 check duplicate driver emails/phones (only if drivers are provided)
+    if (drivers && drivers.length > 0) {
+      const driverEmails = drivers
+        .filter((d) => d.email)
+        .map((d) => d.email);
+      const driverPhones = drivers
+        .filter((d) => d.phone)
+        .map((d) => d.phone);
 
-    const duplicateDrivers = await User.find({
-      $or: [
-        { email: { $in: driverEmails } },
-        { phone: { $in: driverPhones } },
-      ],
-    });
-
-    if (duplicateDrivers.length > 0) {
-      return res.status(400).json({
-        message: `User(s) already exist with email/phone: ${duplicateDrivers
-          .map((d) => d.email || d.phone)
-          .join(", ")}`,
+      const duplicateDrivers = await User.find({
+        $or: [
+          { email: { $in: driverEmails } },
+          { phone: { $in: driverPhones } },
+        ],
       });
+
+      if (duplicateDrivers.length > 0) {
+        return res.status(400).json({
+          message: `User(s) already exist with email/phone: ${duplicateDrivers
+            .map((d) => d.email || d.phone)
+            .join(", ")}`,
+        });
+      }
     }
 
     // 🚛 create trucks
@@ -559,23 +563,25 @@ exports.addMultipleTrucksAndDrivers = async (req, res) => {
     // 👨‍✈️ create drivers (password will be hashed via pre-save hook)
     const createdDrivers = [];
 
-    for (let i = 0; i < drivers.length; i++) {
-      const d = drivers[i];
-      const assignedTruck = createdTrucks[d.truckIndex];
+    if (drivers && drivers.length > 0) {
+      for (let i = 0; i < drivers.length; i++) {
+        const d = drivers[i];
+        const assignedTruck = createdTrucks[d.truckIndex];
 
-      const driver = await User.create({
-        name: d.name,
-        email: d.email,
-        phone: d.phone,
-        password: d.password, // 🔥 will be hashed by pre-save hook in userModel
-        role: "driver",
-        truckOwnerId: ownerId,
-        assignedTruckId: assignedTruck._id,
-        createdBy: ownerId,
-        verificationStatus: "approved",
-      });
+        const driver = await User.create({
+          name: d.name,
+          email: d.email,
+          phone: d.phone,
+          password: d.password, // 🔥 will be hashed by pre-save hook in userModel
+          role: "driver",
+          truckOwnerId: ownerId,
+          assignedTruckId: assignedTruck._id,
+          createdBy: ownerId,
+          verificationStatus: "approved",
+        });
 
-      createdDrivers.push(driver);
+        createdDrivers.push(driver);
+      }
     }
 
     res.status(201).json({
