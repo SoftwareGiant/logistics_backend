@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const { searchTrucks, getOwnerFleet, updateTruckLocation } = require("../controllers/truckController");
+const { searchTrucks, getOwnerFleet, updateTruckLocation, checkTruckExists } = require("../controllers/truckController");
 const { protect } = require("../middlewares/authMiddleware");
 const { authorizeRoles } = require("../middlewares/roleMiddleware");
 
@@ -18,6 +18,12 @@ router.put(
   protect,
   authorizeRoles("driver"),
   updateTruckLocation
+);
+
+router.get(
+  "/check/:truckNumber",
+  protect,
+  checkTruckExists
 );
 
 module.exports = router;

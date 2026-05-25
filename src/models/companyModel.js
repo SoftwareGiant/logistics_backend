@@ -37,6 +37,10 @@ const companySchema = new mongoose.Schema(
         required: true,
         lowercase: true,
       },
+      address: {
+        type: String,
+        trim: true,
+      },
       coordinates: {
         type: {
           type: String,

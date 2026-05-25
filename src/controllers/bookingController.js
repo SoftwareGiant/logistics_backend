@@ -4,6 +4,22 @@ const Truck = require("../models/truckModel");
 const User = require("../models/userModel");
 const Requirement = require("../models/requirementModel");
 
+const getCompanyPrice = (actualPrice) => {
+  if (!actualPrice) return 0;
+  const price = Number(actualPrice);
+  if (Number.isNaN(price)) return actualPrice;
+
+  let markup = 0;
+  if (price <= 20000) {
+    markup = 0.20;
+  } else if (price <= 50000) {
+    markup = 0.10;
+  } else {
+    markup = 0.07;
+  }
+  return Math.round(price + (price * markup));
+};
+
 // ================= CREATE BOOKING =================
 exports.createBooking = async (req, res) => {
   const session = await mongoose.startSession();
@@ -104,9 +120,24 @@ if (req.user.role === "company") {
     await session.commitTransaction();
     session.endSession();
 
+    // 🔔 Send real-time notification to truck owner via Socket.io
+    const io = req.app.get("io");
+    if (io) {
+      io.to(`user:${truck.ownerId}`).emit("notification", {
+        title: "New Booking Request 🚛",
+        body: `${req.user.name || "A company"} has booked your truck ${truck.truckNumber}.`,
+        url: "/dashboard/truck-owner",
+      });
+    }
+
+    const bookingObj = booking.toObject();
+    if (req.user.role !== "truck_owner") {
+      bookingObj.price = getCompanyPrice(bookingObj.price);
+    }
+
     res.status(201).json({
       message: "Booking created successfully",
-      booking,
+      booking: bookingObj,
     });
   } catch (error) {
     await session.abortTransaction();
@@ -166,6 +197,11 @@ exports.updateBookingByOwner = async (req, res) => {
     // ================= REJECT =================
     else if (action === "reject") {
       booking.status = "rejected";
+
+      // 🚛 Mark truck as available again
+      const truck = booking.truckId;
+      truck.availability = "available";
+      await truck.save();
     }
 
     else {
@@ -173,6 +209,18 @@ exports.updateBookingByOwner = async (req, res) => {
     }
 
     await booking.save();
+
+    // 🔔 Send real-time notification to company when booking is accepted
+    if (action === "accept") {
+      const io = req.app.get("io");
+      if (io) {
+        io.to(`user:${booking.companyId}`).emit("notification", {
+          title: "Booking Accepted ✅",
+          body: `Your booking for truck ${booking.truckId.truckNumber} has been accepted! A driver has been assigned.`,
+          url: "/dashboard/company/my-booking",
+        });
+      }
+    }
 
     res.json({
       message: `Booking ${action}ed successfully`,
@@ -277,9 +325,14 @@ exports.updateBookingByDriver = async (req, res) => {
 
     await booking.save();
 
+    const bookingObj = booking.toObject ? booking.toObject() : booking;
+    if (req.user.role !== "truck_owner") {
+      bookingObj.price = getCompanyPrice(bookingObj.price);
+    }
+
     res.json({
       message: "Status updated successfully",
-      booking,
+      booking: bookingObj,
     });
 
   } catch (error) {
@@ -305,9 +358,17 @@ exports.getCompanyBookings = async (req, res) => {
       .populate("truckId")
       .populate("driverId", "name phone");
 
+    const mappedBookings = bookings.map(b => {
+      const bObj = b.toObject ? b.toObject() : b;
+      if (req.user.role !== "truck_owner") {
+        bObj.price = getCompanyPrice(bObj.price);
+      }
+      return bObj;
+    });
+
     res.json({
-      total: bookings.length,
-      bookings,
+      total: mappedBookings.length,
+      bookings: mappedBookings,
     });
 
   } catch (error) {
@@ -348,9 +409,17 @@ exports.getDriverBookings = async (req, res) => {
       .populate("truckId")
       .populate("companyId", "name phone");
 
+    const mappedBookings = bookings.map(b => {
+      const bObj = b.toObject ? b.toObject() : b;
+      if (req.user.role !== "truck_owner") {
+        bObj.price = getCompanyPrice(bObj.price);
+      }
+      return bObj;
+    });
+
     res.json({
-      total: bookings.length,
-      bookings,
+      total: mappedBookings.length,
+      bookings: mappedBookings,
     });
 
   } catch (error) {
@@ -385,9 +454,17 @@ exports.getDriverCurrentTrip = async (req, res) => {
       .populate("truckId")
       .populate("companyId", "name phone");
 
+    let currentTripObj = currentTrip ? (currentTrip.toObject ? currentTrip.toObject() : currentTrip) : null;
+    let nextTripObj = nextTrip ? (nextTrip.toObject ? nextTrip.toObject() : nextTrip) : null;
+
+    if (req.user.role !== "truck_owner") {
+      if (currentTripObj) currentTripObj.price = getCompanyPrice(currentTripObj.price);
+      if (nextTripObj) nextTripObj.price = getCompanyPrice(nextTripObj.price);
+    }
+
     res.json({
-      currentTrip: currentTrip || null,
-      nextTrip: nextTrip || null,
+      currentTrip: currentTripObj,
+      nextTrip: nextTripObj,
     });
 
   } catch (error) {
@@ -430,11 +507,19 @@ exports.getDriverTripHistory = async (req, res) => {
       .skip((page - 1) * limit)
       .limit(limit);
 
+    const mappedBookings = bookings.map(b => {
+      const bObj = b.toObject ? b.toObject() : b;
+      if (req.user.role !== "truck_owner") {
+        bObj.price = getCompanyPrice(bObj.price);
+      }
+      return bObj;
+    });
+
     res.json({
       total,
       page,
       pages: Math.ceil(total / limit),
-      bookings,
+      bookings: mappedBookings,
     });
 
   } catch (error) {

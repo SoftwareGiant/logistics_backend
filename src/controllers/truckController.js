@@ -82,6 +82,22 @@ exports.searchTrucks = async (req, res) => {
 
       if (!isReturn && !isNewTrip) return;
 
+const getCompanyPrice = (actualPrice) => {
+  if (!actualPrice) return 0;
+  const price = Number(actualPrice);
+  if (Number.isNaN(price)) return actualPrice;
+
+  let markup = 0;
+  if (price <= 20000) {
+    markup = 0.20;
+  } else if (price <= 50000) {
+    markup = 0.10;
+  } else {
+    markup = 0.07;
+  }
+  return Math.round(price + (price * markup));
+};
+
       const formatted = {
         _id: t._id,
         truckNumber: t.truckNumber,
@@ -93,9 +109,9 @@ exports.searchTrucks = async (req, res) => {
         averageTime: t.usualRoute.averageTime,
         currentLocation: currentCity,
 
-        price: isReturn
+        price: getCompanyPrice(isReturn
           ? t.pricing.returnPrice
-          : t.pricing.normalPrice,
+          : t.pricing.normalPrice),
 
         isReturn,
         isNewTrip,
@@ -241,5 +257,24 @@ exports.getOwnerFleet = async (req, res) => {
     res.status(500).json({
       message: error.message,
     });
+  }
+};
+
+// ================= CHECK TRUCK EXISTS =================
+exports.checkTruckExists = async (req, res) => {
+  try {
+    const { truckNumber } = req.params;
+    if (!truckNumber) {
+      return res.status(400).json({ message: "Truck number parameter is required" });
+    }
+
+    const truck = await Truck.findOne({ truckNumber: truckNumber.toUpperCase().trim() });
+    
+    return res.json({
+      exists: !!truck,
+      message: truck ? "Truck number already exists" : "Truck number is available"
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };

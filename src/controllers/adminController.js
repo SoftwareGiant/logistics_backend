@@ -16,6 +16,61 @@ const parsePagination = (query) => {
     skip: (page - 1) * limit,
   };
 };
+
+const getCompanyPrice = (actualPrice) => {
+  if (!actualPrice) return 0;
+  const price = Number(actualPrice);
+  if (Number.isNaN(price)) return actualPrice;
+
+  let markup = 0;
+  if (price <= 20000) {
+    markup = 0.20;
+  } else if (price <= 50000) {
+    markup = 0.10;
+  } else {
+    markup = 0.07;
+  }
+  return Math.round(price + (price * markup));
+};
+
+const getActualPrice = (markedUpPrice) => {
+  if (!markedUpPrice) return 0;
+  const mPrice = Number(markedUpPrice);
+  if (Number.isNaN(mPrice)) return markedUpPrice;
+
+  if (mPrice <= 24000) {
+    return Math.round(mPrice / 1.20);
+  } else if (mPrice <= 55000) {
+    return Math.round(mPrice / 1.10);
+  } else {
+    return Math.round(mPrice / 1.07);
+  }
+};
+
+const markupTruck = (t) => {
+  if (!t) return t;
+  const tObj = t.toObject ? t.toObject() : { ...t };
+  if (tObj.pricing) {
+    tObj.basePricing = {
+      normalPrice: tObj.pricing.normalPrice,
+      returnPrice: tObj.pricing.returnPrice,
+    };
+    tObj.pricing = {
+      normalPrice: getCompanyPrice(tObj.pricing.normalPrice),
+      returnPrice: getCompanyPrice(tObj.pricing.returnPrice),
+    };
+  }
+  return tObj;
+};
+
+const markupDriver = (d) => {
+  if (!d) return d;
+  const dObj = d.toObject ? d.toObject() : { ...d };
+  if (dObj.assignedTruckId) {
+    dObj.assignedTruckId = markupTruck(dObj.assignedTruckId);
+  }
+  return dObj;
+};
 // ================= GET PENDING USERS =================
 
 exports.getPendingUsers = async (req, res) => {
@@ -63,6 +118,7 @@ exports.getPendingUsers = async (req, res) => {
               location: {
                 city: company?.location?.city,
                 state: company?.location?.state,
+                address: company?.location?.address,
                 coordinates: company?.location?.coordinates,
               },
 
@@ -95,16 +151,18 @@ exports.getPendingUsers = async (req, res) => {
           });
 
           const trucksWithDrivers = trucks.map((t) => ({
-            ...t,
+            ...markupTruck(t),
             driver: driverMap[t._id.toString()] || null,
           }));
+
+          const markedUpDrivers = drivers.map(markupDriver);
 
           return {
             ...user,
 
             ownerDetails: {
               trucks: trucksWithDrivers, // 🔥 FULL TRUCK + DRIVER
-              drivers, // 🔥 ALL DRIVERS
+              drivers: markedUpDrivers, // 🔥 ALL DRIVERS
             },
           };
         }
@@ -186,6 +244,7 @@ exports.getApprovedUsers = async (req, res) => {
               location: {
                 city: company?.location?.city,
                 state: company?.location?.state,
+                address: company?.location?.address,
                 coordinates: company?.location?.coordinates,
               },
 
@@ -218,16 +277,18 @@ exports.getApprovedUsers = async (req, res) => {
           });
 
           const trucksWithDrivers = trucks.map((t) => ({
-            ...t,
+            ...markupTruck(t),
             driver: driverMap[t._id.toString()] || null,
           }));
+
+          const markedUpDrivers = drivers.map(markupDriver);
 
           return {
             ...user,
 
             ownerDetails: {
               trucks: trucksWithDrivers,
-              drivers,
+              drivers: markedUpDrivers,
             },
           };
         }
@@ -304,6 +365,7 @@ exports.getRejectedUsers = async (req, res) => {
               location: {
                 city: company?.location?.city,
                 state: company?.location?.state,
+                address: company?.location?.address,
                 coordinates: company?.location?.coordinates,
               },
 
@@ -336,16 +398,18 @@ exports.getRejectedUsers = async (req, res) => {
           });
 
           const trucksWithDrivers = trucks.map((t) => ({
-            ...t,
+            ...markupTruck(t),
             driver: driverMap[t._id.toString()] || null,
           }));
+
+          const markedUpDrivers = drivers.map(markupDriver);
 
           return {
             ...user,
 
             ownerDetails: {
               trucks: trucksWithDrivers,
-              drivers,
+              drivers: markedUpDrivers,
             },
           };
         }
@@ -659,11 +723,15 @@ exports.getApprovedTruckOwners = async (req, res) => {
       return acc;
     }, {});
 
-    const truckOwners = owners.map((owner) => ({
-      owner,
-      trucks: trucksByOwner[owner._id.toString()] || [],
-      drivers: driversByOwner[owner._id.toString()] || [],
-    }));
+    const truckOwners = owners.map((owner) => {
+      const ownerTrucks = trucksByOwner[owner._id.toString()] || [];
+      const ownerDrivers = driversByOwner[owner._id.toString()] || [];
+      return {
+        owner,
+        trucks: ownerTrucks.map(markupTruck),
+        drivers: ownerDrivers.map(markupDriver),
+      };
+    });
 
     res.json({
       total,
@@ -807,7 +875,10 @@ exports.getAllFleetStatus = async (req, res) => {
         isAvailableForReturnTrip,
         tripType,
         images: t.images || [],
-        pricing: t.pricing || { normalPrice: 0, returnPrice: 0 },
+        pricing: {
+          normalPrice: getCompanyPrice(t.pricing?.normalPrice || 0),
+          returnPrice: getCompanyPrice(t.pricing?.returnPrice || 0),
+        },
       };
     });
 
@@ -1022,12 +1093,19 @@ const bookings = await Booking.find(query)
       .skip((page - 1) * limit)
       .limit(limit);
 
+    const mappedBookings = bookings.map(b => {
+      const bObj = b.toObject ? b.toObject() : b;
+      bObj.basePrice = bObj.price;
+      bObj.price = getCompanyPrice(bObj.price);
+      return bObj;
+    });
+
     // ================= RESPONSE =================
     res.json({
       total,
       page,
       pages: Math.ceil(total / limit),
-      bookings,
+      bookings: mappedBookings,
     });
 
   } catch (error) {
@@ -1160,7 +1238,8 @@ exports.getRequirementOffersAdmin = async (req, res) => {
         },
 
         isReturn,
-        price,
+        basePrice: price,
+        price: getCompanyPrice(price),
         status: o.status,
       };
     });
@@ -1208,15 +1287,15 @@ exports.updateTruckPricing = async (req, res) => {
     }
 
     truck.pricing = {
-      normalPrice: nPrice,
-      returnPrice: rPrice
+      normalPrice: getActualPrice(nPrice),
+      returnPrice: getActualPrice(rPrice)
     };
 
     await truck.save();
 
     res.json({
       message: "Truck pricing updated successfully",
-      truck
+      truck: markupTruck(truck)
     });
   } catch (error) {
     res.status(500).json({ message: error.message });

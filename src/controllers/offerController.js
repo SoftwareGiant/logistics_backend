@@ -113,6 +113,17 @@ exports.createOffer = async (req, res) => {
       truckOwnerId: req.user._id,
     });
 
+    // 🔔 Notify the company about the new offer
+    const io = req.app.get("io");
+    if (io) {
+      const truck = await Truck.findById(truckId);
+      io.to(`user:${requirement.companyId}`).emit("notification", {
+        title: "New Offer Received 🚛",
+        body: `A truck owner has sent an offer with truck ${truck?.truckNumber || "N/A"} for your requirement.`,
+        url: "/dashboard/company/requirements",
+      });
+    }
+
     res.json({
       message: "Offer sent",
       offer,
@@ -135,6 +146,22 @@ exports.getMyOffers = async (req, res) => {
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
+};
+
+const getCompanyPrice = (actualPrice) => {
+  if (!actualPrice) return 0;
+  const price = Number(actualPrice);
+  if (Number.isNaN(price)) return actualPrice;
+
+  let markup = 0;
+  if (price <= 20000) {
+    markup = 0.20;
+  } else if (price <= 50000) {
+    markup = 0.10;
+  } else {
+    markup = 0.07;
+  }
+  return Math.round(price + (price * markup));
 };
 
 // 📦 Company → View offers (AUTO PRICE)
@@ -164,7 +191,7 @@ exports.getRequirementOffers = async (req, res) => {
         truckNumber: t.truckNumber,
         driver: o.driverId,
         isReturn,
-        price,
+        price: getCompanyPrice(price),
         averageTime: t.usualRoute?.averageTime,
       };
     });
@@ -262,7 +289,22 @@ exports.acceptOffer = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
-    res.json({ message: "Offer accepted and booking created", booking });
+    // 🔔 Send real-time notification to truck owner via Socket.io
+    const io = req.app.get("io");
+    if (io) {
+      io.to(`user:${offer.truckOwnerId}`).emit("notification", {
+        title: "Offer Accepted ✅",
+        body: `A company has accepted your offer for truck ${t.truckNumber}. Booking created!`,
+        url: "/dashboard/truck-owner",
+      });
+    }
+
+    const bookingObj = booking.toObject();
+    if (req.user.role === "company" || req.user.role === "company_staff") {
+      bookingObj.price = getCompanyPrice(bookingObj.price);
+    }
+
+    res.json({ message: "Offer accepted and booking created", booking: bookingObj });
 
   } catch (error) {
     await session.abortTransaction();

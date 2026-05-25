@@ -33,6 +33,14 @@ const socketToDriver = new Map();
 io.on("connection", (socket) => {
   console.log(`🔌 Socket connected: ${socket.id}`);
 
+  // ── User joins their personal notification room ────────────────────────────
+  // Called by any logged-in user to receive real-time push notifications.
+  socket.on("user:join", (userId) => {
+    if (!userId) return;
+    socket.join(`user:${userId}`);
+    console.log(`🔔 User ${userId} joined notification room (socket ${socket.id})`);
+  });
+
   // ── Observer joins a driver's channel ──────────────────────────────────────
   // Called by company/truck-owner dashboards to subscribe to a driver's location.
   socket.on("driver:join", (driverId) => {

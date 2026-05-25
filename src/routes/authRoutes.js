@@ -13,4 +13,4 @@ router.post("/register/truck-owner", registerTruckOwner);
 router.post("/login", login);
 router.get("/me", protect, (req, res) => res.json({ user: req.user }));
 
-module.exports = router;
+module.exports = router;
