@@ -20,6 +20,19 @@ const getCompanyPrice = (actualPrice) => {
   return Math.round(price + (price * markup));
 };
 
+const extractCityName = (loc) => {
+  if (!loc) return "unknown";
+  if (typeof loc === "object" && loc.city) return loc.city;
+  if (typeof loc === "string") {
+    if (loc.startsWith("{")) {
+      const match = loc.match(/city:\s*['"]([^'"]+)['"]/);
+      if (match) return match[1];
+    }
+    return loc;
+  }
+  return "unknown";
+};
+
 // ================= CREATE BOOKING =================
 exports.createBooking = async (req, res) => {
   const session = await mongoose.startSession();
@@ -316,7 +329,7 @@ exports.updateBookingByDriver = async (req, res) => {
         updateData.pendingLocation = null;
       } else {
         updateData.currentLocation = {
-          city: booking.dropCity,
+          city: extractCityName(booking.dropCity),
         };
       }
 
@@ -591,7 +604,7 @@ exports.selectReturnTrip = async (req, res) => {
     await Truck.findByIdAndUpdate(booking.truckId, {
       isReturnTripReady: true,
       currentLocation: {
-        city: booking.dropCity,
+        city: extractCityName(booking.dropCity),
       }
     });
 
