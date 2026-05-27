@@ -64,6 +64,13 @@ const userSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
+
+    // Bank Details (for drivers)
+    bankDetails: {
+      accountHolderName: { type: String, trim: true, default: "" },
+      ifsc: { type: String, trim: true, uppercase: true, default: "" },
+      accountNumber: { type: String, trim: true, default: "" },
+    },
   },
   { timestamps: true }
 );
