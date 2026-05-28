@@ -50,13 +50,30 @@ exports.searchTrucks = async (req, res) => {
       // ❌ skip unapproved owners
       if (t.ownerId?.verificationStatus !== "approved") return;
 
+      const getCityStr = (loc) => {
+        if (!loc) return "";
+        if (typeof loc === "string") {
+          if (loc.startsWith("{")) {
+            try {
+              const parsed = JSON.parse(loc);
+              return (parsed.city || "").toLowerCase().trim();
+            } catch (e) {}
+          }
+          return loc.toLowerCase().trim();
+        }
+        if (typeof loc === "object" && loc.city) {
+          return loc.city.toLowerCase().trim();
+        }
+        return "";
+      };
+
       const currentCity = t.currentLocation?.city;
       const activeBooking = bookingMap[t._id.toString()];
       const hasActiveBooking = Boolean(activeBooking);
       const activeBookingIsNewTrip =
         activeBooking &&
-        activeBooking.pickupCity === t.usualRoute.from &&
-        activeBooking.dropCity === t.usualRoute.to;
+        getCityStr(activeBooking.pickupCity) === t.usualRoute.from &&
+        getCityStr(activeBooking.dropCity) === t.usualRoute.to;
 
       const isNewTrip =
         t.usualRoute.from === pickup &&

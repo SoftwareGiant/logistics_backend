@@ -90,8 +90,8 @@ if (req.user.role === "company") {
 
     // 🔥 detect return trip
     const isReturn =
-      truck.usualRoute.from === drop.city &&
-      truck.usualRoute.to === pickup.city;
+      truck.usualRoute.from?.toLowerCase().trim() === drop.city?.toLowerCase().trim() &&
+      truck.usualRoute.to?.toLowerCase().trim() === pickup.city?.toLowerCase().trim();
 
     // 💰 pricing (backend trusted)
     const price = isReturn
@@ -128,6 +128,7 @@ if (req.user.role === "company") {
 
     // 🚛 mark truck busy
     truck.availability = "busy";
+    truck.isReturnTripReady = false;
     await truck.save({ session });
 
     await session.commitTransaction();
@@ -558,8 +559,8 @@ exports.getReturnTripMatches = async (req, res) => {
     }
 
     // Swapping locations for return trip
-    const returnPickup = booking.dropCity.toLowerCase().trim();
-    const returnDrop = booking.pickupCity.toLowerCase().trim();
+    const returnPickup = extractCityName(booking.dropCity).toLowerCase().trim();
+    const returnDrop = extractCityName(booking.pickupCity).toLowerCase().trim();
 
     // Find active requirements that match the return route
     const requirements = await Requirement.find({

@@ -284,6 +284,7 @@ exports.acceptOffer = async (req, res) => {
     // 5. Mark truck as busy
     if (t.type === "Open Body") t.type = "open";
     t.availability = "busy";
+    t.isReturnTripReady = false;
     await t.save({ session });
 
     await session.commitTransaction();
