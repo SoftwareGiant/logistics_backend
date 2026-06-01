@@ -18,7 +18,6 @@ exports.registerCompany = async (req, res) => {
   try {
     const {
       name,
-      email,
       phone,
       password,
       companyName,
@@ -28,7 +27,7 @@ exports.registerCompany = async (req, res) => {
     } = req.body;
 
     // 🔍 validation
-    if (!name || !password || (!email && !phone)) {
+    if (!name || !password || !phone) {
       throw new Error("Basic details required");
     }
 
@@ -37,18 +36,7 @@ exports.registerCompany = async (req, res) => {
     }
 
 
-    let existingUser
-    if (email) {
-      existingUser = await User.findOne({
-        $or: [{ email }],
-      }).session(session);
-    }
-
-    if (phone) {
-      existingUser = await User.findOne({
-        $or: [{ phone }],
-      }).session(session);
-    }
+    const existingUser = await User.findOne({ phone }).session(session);
 
     if (existingUser) {
       throw new Error("User already exists");
@@ -59,7 +47,6 @@ exports.registerCompany = async (req, res) => {
       [
         {
           name,
-          email,
           phone,
           password,
           role: "company",
@@ -78,14 +65,12 @@ exports.registerCompany = async (req, res) => {
       for (let i = 0; i < representatives.length; i++) {
         const rep = representatives[i];
 
-        if (!rep?.name || (!rep.email && !rep.phone) || !rep.password) {
+        if (!rep?.name || !rep.phone || !rep.password) {
           throw new Error(`Invalid representative data at index ${i}`);
         }
 
         // 🔍 duplicate check
-        const existingRep = await User.findOne({
-          $or: [{ email: rep.email }, { phone: rep.phone }],
-        }).session(session);
+        const existingRep = await User.findOne({ phone: rep.phone }).session(session);
 
         if (existingRep) {
           throw new Error(`Representative already exists at index ${i}`);
@@ -96,7 +81,6 @@ exports.registerCompany = async (req, res) => {
           [
             {
               name: rep.name,
-              email: rep.email,
               phone: rep.phone,
               password: rep.password, // 🔥 will be hashed by pre-save hook
               role: "company_staff",
@@ -111,7 +95,6 @@ exports.registerCompany = async (req, res) => {
         // 🔥 prepare for company schema
         repDocsForCompany.push({
           name: rep.name,
-          email: rep.email,
           phone: rep.phone,
         });
       }
@@ -177,28 +160,16 @@ exports.registerTruckOwner = async (req, res) => {
   try {
     const {
       name,
-      email,
       phone,
       password,
       trucks = [],
       drivers = [],
     } = req.body;
 
-    if (!name || !password || (!email && !phone)) {
+    if (!name || !password || !phone) {
       throw new Error("Basic details required");
     }
-    let existingUser
-    if (email) {
-      existingUser = await User.findOne({
-        $or: [{ email }],
-      }).session(session);
-    }
-
-    if (phone) {
-      existingUser = await User.findOne({
-        $or: [{ phone }],
-      }).session(session);
-    }
+    const existingUser = await User.findOne({ phone }).session(session);
 
 
     if (existingUser) {
@@ -209,7 +180,6 @@ exports.registerTruckOwner = async (req, res) => {
       [
         {
           name,
-          email,
           phone,
           password,
           role: "truck_owner",
@@ -280,7 +250,6 @@ exports.registerTruckOwner = async (req, res) => {
           [
             {
               name: d.name,
-              email: d.email,
               phone: d.phone,
               password: d.password, // 🔥 will be hashed by pre-save hook
               role: "driver",
@@ -325,23 +294,13 @@ exports.registerTruckOwner = async (req, res) => {
 // ================= LOGIN =================
 exports.login = async (req, res) => {
   try {
-    const { email, phone, password } = req.body;
+    const { phone, password } = req.body;
 
-    if ((!email && !phone) || !password) {
+    if (!phone || !password) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    let user;
-    if (email) {
-      user = await User.findOne({
-        $or: [{ email }],
-      });
-    }
-    if (phone) {
-      user = await User.findOne({
-        $or: [{ phone }],
-      });
-    }
+    const user = await User.findOne({ phone });
 
     if (!user) {
       return res.status(400).json({ message: "User not found" });
