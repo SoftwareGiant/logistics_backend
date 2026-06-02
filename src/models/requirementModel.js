@@ -64,6 +64,10 @@ const requirementSchema = new mongoose.Schema(
 
     preferredDate: Date,
 
+    preferredTime: String,
+
+    price: Number,
+
     additionalNotes: {
       type: String,
       trim: true,

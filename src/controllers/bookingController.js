@@ -94,9 +94,7 @@ if (req.user.role === "company") {
       truck.usualRoute.to?.toLowerCase().trim() === pickup.city?.toLowerCase().trim();
 
     // 💰 pricing (backend trusted)
-    const price = isReturn
-      ? truck.pricing.returnPrice
-      : truck.pricing.normalPrice;
+    const price = 0;
 
     // 👨‍✈️ find driver (optional)
     const driver = await User.findOne({

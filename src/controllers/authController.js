@@ -199,9 +199,7 @@ exports.registerTruckOwner = async (req, res) => {
           !t.capacity ||
           !t.type ||
           !t.usualRoute?.from ||
-          !t.usualRoute?.to ||
-          !t.pricing?.normalPrice ||
-          !t.pricing?.returnPrice
+          !t.usualRoute?.to
         ) {
           throw new Error(`Invalid truck data at index ${index}`);
         }
@@ -223,10 +221,7 @@ exports.registerTruckOwner = async (req, res) => {
 
             coordinates: t.currentLocation?.coordinates || [0, 0],
           },
-          pricing: {
-            normalPrice: t.pricing.normalPrice,
-            returnPrice: t.pricing.returnPrice,
-          },
+
           availability: "available",
           images: Array.isArray(t.images) ? t.images : [],
         };

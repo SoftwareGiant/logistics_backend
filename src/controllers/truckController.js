@@ -126,9 +126,7 @@ const getCompanyPrice = (actualPrice) => {
         averageTime: t.usualRoute.averageTime,
         currentLocation: currentCity,
 
-        price: getCompanyPrice(isReturn
-          ? t.pricing.returnPrice
-          : t.pricing.normalPrice),
+        price: 0,
 
         isReturn,
         isNewTrip,

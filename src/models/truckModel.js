@@ -105,16 +105,7 @@ const truckSchema = new mongoose.Schema(
       to: String,
       completedAt: Date,
     },
-    pricing: {
-      normalPrice: {
-        type: Number,
-        required: true
-      },
-      returnPrice: {
-        type: Number,
-        required: true
-      }
-    },
+
 
     availability: {
       type: String,

@@ -36,9 +36,27 @@ exports.getMatchingRequirements = async (req, res) => {
       })
       .filter(Boolean);
 
+    // 3. 100km Radius matches (Pickup location of requirement within 100km of truck's current location)
+    const radiusMatches = trucks
+      .filter(t => t.currentLocation && t.currentLocation.coordinates && (t.currentLocation.coordinates[0] !== 0 || t.currentLocation.coordinates[1] !== 0))
+      .map(t => ({
+        "pickupCity.coordinates": {
+          $geoWithin: {
+            // 100 km / Earth radius in km
+            $centerSphere: [ t.currentLocation.coordinates, 100 / 6378.1 ]
+          }
+        }
+      }));
+
+    const orConditions = [...usualRoutes, ...returnRoutes, ...radiusMatches];
+    
+    if (orConditions.length === 0) {
+      return res.json({ requirements: [] });
+    }
+
     const requirements = await Requirement.find({
       status: "active",
-      $or: [...usualRoutes, ...returnRoutes],
+      $or: orConditions,
     }).populate("companyId", "name phone");
 
     res.json({ requirements });
@@ -182,9 +200,7 @@ exports.getRequirementOffers = async (req, res) => {
         t.usualRoute.from === requirement.dropCity.city &&
         t.usualRoute.to === requirement.pickupCity.city;
 
-      const price = isReturn
-        ? t.pricing.returnPrice
-        : t.pricing.normalPrice;
+      const price = requirement.price || 0;
 
       return {
         _id: o._id,
@@ -244,7 +260,7 @@ exports.acceptOffer = async (req, res) => {
     const isReturn =
       t.usualRoute.from === requirement.dropCity.city &&
       t.usualRoute.to === requirement.pickupCity.city;
-    const price = isReturn ? t.pricing.returnPrice : t.pricing.normalPrice;
+    const price = requirement.price || 0;
 
     // 1. Create Booking
     const [booking] = await Booking.create(

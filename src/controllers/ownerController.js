@@ -191,13 +191,11 @@ exports.addTruck = async (req, res) => {
       !capacity ||
       !type ||
       !usualRoute?.from ||
-      !usualRoute?.to ||
-      !pricing?.normalPrice ||
-      !pricing?.returnPrice
+      !usualRoute?.to
     ) {
       return res.status(400).json({
         message:
-          "All fields required: truckNumber, capacity, type, usualRoute (from, to), pricing (normalPrice, returnPrice)",
+          "All fields required: truckNumber, capacity, type, usualRoute (from, to)",
       });
     }
 
@@ -229,10 +227,7 @@ exports.addTruck = async (req, res) => {
           : usualRoute.from.toLowerCase().trim(),
         coordinates: currentLocation?.coordinates || [0, 0],
       },
-      pricing: {
-        normalPrice: pricing.normalPrice,
-        returnPrice: pricing.returnPrice,
-      },
+
       availability: "available",
       images: Array.isArray(images) ? images : [],
     });
@@ -340,13 +335,11 @@ exports.addTruckWithDriver = async (req, res) => {
       !capacity ||
       !type ||
       !usualRoute?.from ||
-      !usualRoute?.to ||
-      !pricing?.normalPrice ||
-      !pricing?.returnPrice
+      !usualRoute?.to
     ) {
       return res.status(400).json({
         message:
-          "Truck fields required: truckNumber, capacity, type, usualRoute (from, to), pricing (normalPrice, returnPrice)",
+          "Truck fields required: truckNumber, capacity, type, usualRoute (from, to)",
       });
     }
 
@@ -403,10 +396,7 @@ exports.addTruckWithDriver = async (req, res) => {
           : usualRoute.from.toLowerCase().trim(),
         coordinates: currentLocation?.coordinates || [0, 0],
       },
-      pricing: {
-        normalPrice: pricing.normalPrice,
-        returnPrice: pricing.returnPrice,
-      },
+
       availability: "available",
       images: Array.isArray(images) ? images : [],
     });
@@ -461,9 +451,7 @@ exports.addMultipleTrucksAndDrivers = async (req, res) => {
         !t.capacity ||
         !t.type ||
         !t.usualRoute?.from ||
-        !t.usualRoute?.to ||
-        !t.pricing?.normalPrice ||
-        !t.pricing?.returnPrice
+        !t.usualRoute?.to
       ) {
         throw new Error(
           `Invalid truck data at index ${index}: all required fields missing`
@@ -550,10 +538,7 @@ exports.addMultipleTrucksAndDrivers = async (req, res) => {
           : t.usualRoute.from.toLowerCase().trim(),
         coordinates: t.currentLocation?.coordinates || [0, 0],
       },
-      pricing: {
-        normalPrice: t.pricing.normalPrice,
-        returnPrice: t.pricing.returnPrice,
-      },
+
       availability: "available",
       images: Array.isArray(t.images) ? t.images : [],
     }));
@@ -615,7 +600,6 @@ exports.updateFleetItem = async (req, res) => {
       capacity,
       type,
       usualRoute,
-      pricing,
       driverName,
       driverPhone,
       images,
@@ -655,7 +639,7 @@ exports.updateFleetItem = async (req, res) => {
         averageTime: usualRoute.averageTime?.trim(),
       };
     }
-    if (pricing) truckUpdate.pricing = pricing;
+
     if (images && Array.isArray(images)) truckUpdate.images = images;
 
     let isOccupied = false;
