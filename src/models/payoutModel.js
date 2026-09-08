@@ -2,7 +2,8 @@ const mongoose = require("mongoose");
 
 const payoutSchema = new mongoose.Schema(
   {
-    driverId: {
+    // The truck owner who requested the payout
+    ownerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,

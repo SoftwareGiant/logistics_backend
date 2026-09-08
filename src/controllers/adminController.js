@@ -4,7 +4,6 @@ const Truck = require("../models/truckModel");
 const User = require("../models/userModel");
 const Company = require("../models/companyModel");
 const Requirement = require("../models/requirementModel");
-const Offer = require("../models/offerModel");
 
 const parsePagination = (query) => {
   const page = Math.max(Number(query.page) || 1, 1);
@@ -17,60 +16,17 @@ const parsePagination = (query) => {
   };
 };
 
+// No platform markup — the company sets the price (requirement budget) directly.
 const getCompanyPrice = (actualPrice) => {
-  if (!actualPrice) return 0;
   const price = Number(actualPrice);
-  if (Number.isNaN(price)) return actualPrice;
-
-  let markup = 0;
-  if (price <= 20000) {
-    markup = 0.20;
-  } else if (price <= 50000) {
-    markup = 0.10;
-  } else {
-    markup = 0.07;
-  }
-  return Math.round(price + (price * markup));
-};
-
-const getActualPrice = (markedUpPrice) => {
-  if (!markedUpPrice) return 0;
-  const mPrice = Number(markedUpPrice);
-  if (Number.isNaN(mPrice)) return markedUpPrice;
-
-  if (mPrice <= 24000) {
-    return Math.round(mPrice / 1.20);
-  } else if (mPrice <= 55000) {
-    return Math.round(mPrice / 1.10);
-  } else {
-    return Math.round(mPrice / 1.07);
-  }
+  return Number.isNaN(price) ? 0 : price;
 };
 
 const markupTruck = (t) => {
   if (!t) return t;
-  const tObj = t.toObject ? t.toObject() : { ...t };
-  if (tObj.pricing) {
-    tObj.basePricing = {
-      normalPrice: tObj.pricing.normalPrice,
-      returnPrice: tObj.pricing.returnPrice,
-    };
-    tObj.pricing = {
-      normalPrice: getCompanyPrice(tObj.pricing.normalPrice),
-      returnPrice: getCompanyPrice(tObj.pricing.returnPrice),
-    };
-  }
-  return tObj;
+  return t.toObject ? t.toObject() : { ...t };
 };
 
-const markupDriver = (d) => {
-  if (!d) return d;
-  const dObj = d.toObject ? d.toObject() : { ...d };
-  if (dObj.assignedTruckId) {
-    dObj.assignedTruckId = markupTruck(dObj.assignedTruckId);
-  }
-  return dObj;
-};
 // ================= GET PENDING USERS =================
 
 exports.getPendingUsers = async (req, res) => {
@@ -121,9 +77,6 @@ exports.getPendingUsers = async (req, res) => {
                 address: company?.location?.address,
                 coordinates: company?.location?.coordinates,
               },
-
-              // 🔥 FULL REPRESENTATIVES
-              representatives: company?.representatives || [],
             },
           };
         }
@@ -135,34 +88,11 @@ exports.getPendingUsers = async (req, res) => {
             ownerId: user._id,
           }).lean();
 
-          const drivers = await User.find({
-            truckOwnerId: user._id,
-            role: "driver",
-          })
-            .select("-password")
-            .lean();
-
-          // 🔥 map driver to truck
-          const driverMap = {};
-          drivers.forEach((d) => {
-            if (d.assignedTruckId) {
-              driverMap[d.assignedTruckId.toString()] = d;
-            }
-          });
-
-          const trucksWithDrivers = trucks.map((t) => ({
-            ...markupTruck(t),
-            driver: driverMap[t._id.toString()] || null,
-          }));
-
-          const markedUpDrivers = drivers.map(markupDriver);
-
           return {
             ...user,
-
             ownerDetails: {
-              trucks: trucksWithDrivers, // 🔥 FULL TRUCK + DRIVER
-              drivers: markedUpDrivers, // 🔥 ALL DRIVERS
+              trucks: trucks.map(markupTruck),
+              trucksCount: trucks.length,
             },
           };
         }
@@ -225,15 +155,6 @@ exports.getApprovedUsers = async (req, res) => {
             userId: user._id,
           }).lean();
 
-          const dbRepresentatives = await User.find({
-            role: "company_staff",
-            createdBy: user._id,
-          })
-            .select("-password")
-            .lean();
-
-          const representatives = dbRepresentatives.length > 0 ? dbRepresentatives : (company?.representatives || []);
-
           return {
             ...user,
 
@@ -247,8 +168,6 @@ exports.getApprovedUsers = async (req, res) => {
                 address: company?.location?.address,
                 coordinates: company?.location?.coordinates,
               },
-
-              representatives,
             },
           };
         }
@@ -260,35 +179,11 @@ exports.getApprovedUsers = async (req, res) => {
             ownerId: user._id,
           }).lean();
 
-          const drivers = await User.find({
-            truckOwnerId: user._id,
-            role: "driver",
-          })
-            .select("-password")
-            .populate("assignedTruckId")
-            .lean();
-
-          const driverMap = {};
-
-          drivers.forEach((d) => {
-            if (d.assignedTruckId) {
-              driverMap[d.assignedTruckId.toString()] = d;
-            }
-          });
-
-          const trucksWithDrivers = trucks.map((t) => ({
-            ...markupTruck(t),
-            driver: driverMap[t._id.toString()] || null,
-          }));
-
-          const markedUpDrivers = drivers.map(markupDriver);
-
           return {
             ...user,
-
             ownerDetails: {
-              trucks: trucksWithDrivers,
-              drivers: markedUpDrivers,
+              trucks: trucks.map(markupTruck),
+              trucksCount: trucks.length,
             },
           };
         }
@@ -346,15 +241,6 @@ exports.getRejectedUsers = async (req, res) => {
             userId: user._id,
           }).lean();
 
-          const dbRepresentatives = await User.find({
-            role: "company_staff",
-            createdBy: user._id,
-          })
-            .select("-password")
-            .lean();
-
-          const representatives = dbRepresentatives.length > 0 ? dbRepresentatives : (company?.representatives || []);
-
           return {
             ...user,
 
@@ -368,8 +254,6 @@ exports.getRejectedUsers = async (req, res) => {
                 address: company?.location?.address,
                 coordinates: company?.location?.coordinates,
               },
-
-              representatives,
             },
           };
         }
@@ -381,35 +265,11 @@ exports.getRejectedUsers = async (req, res) => {
             ownerId: user._id,
           }).lean();
 
-          const drivers = await User.find({
-            truckOwnerId: user._id,
-            role: "driver",
-          })
-            .select("-password")
-            .populate("assignedTruckId")
-            .lean();
-
-          const driverMap = {};
-
-          drivers.forEach((d) => {
-            if (d.assignedTruckId) {
-              driverMap[d.assignedTruckId.toString()] = d;
-            }
-          });
-
-          const trucksWithDrivers = trucks.map((t) => ({
-            ...markupTruck(t),
-            driver: driverMap[t._id.toString()] || null,
-          }));
-
-          const markedUpDrivers = drivers.map(markupDriver);
-
           return {
             ...user,
-
             ownerDetails: {
-              trucks: trucksWithDrivers,
-              drivers: markedUpDrivers,
+              trucks: trucks.map(markupTruck),
+              trucksCount: trucks.length,
             },
           };
         }
@@ -450,44 +310,6 @@ exports.approveUser = async (req, res) => {
     user.verificationStatus = "approved";
     await user.save({ session });
 
-    if (user.role === "company") {
-      const company = await Company.findOne({
-        userId: user._id,
-      }).session(session);
-
-      if (company?.representatives?.length > 0) {
-        for (const rep of company.representatives) {
-          if ((!rep.email && !rep.phone) || !rep.password) continue;
-
-          const duplicateFilters = [];
-          if (rep.email) duplicateFilters.push({ email: rep.email });
-          if (rep.phone) duplicateFilters.push({ phone: rep.phone });
-
-          const existing =
-            duplicateFilters.length > 0
-              ? await User.findOne({ $or: duplicateFilters }).session(session)
-              : null;
-
-          if (existing) continue;
-
-          await User.create(
-            [
-              {
-                name: rep.name,
-                email: rep.email,
-                phone: rep.phone,
-                password: rep.password,
-                role: "company_staff",
-                companyId: company._id,
-                createdBy: user._id,
-                verificationStatus: "approved",
-              },
-            ],
-            { session }
-          );
-        }
-      }
-    }
 
     if (user.role === "truck_owner") {
       const drivers = await User.find({
@@ -499,6 +321,13 @@ exports.approveUser = async (req, res) => {
         driver.verificationStatus = "approved";
         await driver.save({ session });
       }
+
+      // ✅ Flag this owner's trucks as verified so they become eligible for matching
+      await Truck.updateMany(
+        { ownerId: user._id },
+        { verified: true },
+        { session }
+      );
     }
 
     await session.commitTransaction();
@@ -523,6 +352,10 @@ exports.rejectUser = async (req, res) => {
 
     user.verificationStatus = "rejected";
     await user.save();
+
+    if (user.role === "truck_owner") {
+      await Truck.updateMany({ ownerId: user._id }, { verified: false });
+    }
 
     res.json({ message: "User rejected" });
   } catch (error) {
@@ -595,56 +428,15 @@ exports.getApprovedCompanyOwners = async (req, res) => {
 
     const ownerIds = owners.map((owner) => owner._id);
 
-    const [companies, representatives] = await Promise.all([
-      Company.find({ userId: { $in: ownerIds } }).lean(),
-      User.find({
-        role: "company_staff",
-        verificationStatus: "approved",
-        createdBy: { $in: ownerIds },
-      })
-        .select("-password")
-        .sort({ createdAt: -1 })
-        .lean(),
-    ]);
-
+    const companies = await Company.find({ userId: { $in: ownerIds } }).lean();
     const companyMap = new Map(
       companies.map((company) => [company.userId.toString(), company])
     );
 
-    const representativesByOwner = representatives.reduce((acc, rep) => {
-      const ownerId = rep.createdBy?.toString();
-
-      if (!ownerId) {
-        return acc;
-      }
-
-      if (!acc[ownerId]) {
-        acc[ownerId] = [];
-      }
-
-      acc[ownerId].push(rep);
-      return acc;
-    }, {});
-
-    const companyOwners = owners.map((owner) => {
-      const company = companyMap.get(owner._id.toString()) || null;
-      const representatives =
-        representativesByOwner[owner._id.toString()] ||
-        company?.representatives ||
-        [];
-
-      return {
-        owner,
-        company: company
-          ? {
-              ...company,
-              representatives,
-            }
-          : {
-              representatives,
-            },
-      };
-    });
+    const companyOwners = owners.map((owner) => ({
+      owner,
+      company: companyMap.get(owner._id.toString()) || null,
+    }));
 
     res.json({
       total,
@@ -660,97 +452,10 @@ exports.getApprovedCompanyOwners = async (req, res) => {
   }
 };
 
-exports.getApprovedTruckOwners = async (req, res) => {
-  try {
-    const { page, limit, skip } = parsePagination(req.query);
-
-    const query = {
-      role: "truck_owner",
-      verificationStatus: "approved",
-    };
-
-    const total = await User.countDocuments(query);
-
-    const owners = await User.find(query)
-      .select("-password")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
-
-    const ownerIds = owners.map((owner) => owner._id);
-
-    const [trucks, drivers] = await Promise.all([
-      Truck.find({ ownerId: { $in: ownerIds } }).sort({ createdAt: -1 }).lean(),
-      User.find({
-        role: "driver",
-        verificationStatus: "approved",
-        truckOwnerId: { $in: ownerIds },
-      })
-        .select("-password")
-        .populate("assignedTruckId")
-        .sort({ createdAt: -1 })
-        .lean(),
-    ]);
-
-    const trucksByOwner = trucks.reduce((acc, truck) => {
-      const ownerId = truck.ownerId?.toString();
-
-      if (!ownerId) {
-        return acc;
-      }
-
-      if (!acc[ownerId]) {
-        acc[ownerId] = [];
-      }
-
-      acc[ownerId].push(truck);
-      return acc;
-    }, {});
-
-    const driversByOwner = drivers.reduce((acc, driver) => {
-      const ownerId = driver.truckOwnerId?.toString();
-
-      if (!ownerId) {
-        return acc;
-      }
-
-      if (!acc[ownerId]) {
-        acc[ownerId] = [];
-      }
-
-      acc[ownerId].push(driver);
-      return acc;
-    }, {});
-
-    const truckOwners = owners.map((owner) => {
-      const ownerTrucks = trucksByOwner[owner._id.toString()] || [];
-      const ownerDrivers = driversByOwner[owner._id.toString()] || [];
-      return {
-        owner,
-        trucks: ownerTrucks.map(markupTruck),
-        drivers: ownerDrivers.map(markupDriver),
-      };
-    });
-
-    res.json({
-      total,
-      page,
-      limit,
-      pages: Math.ceil(total / limit),
-      truckOwners,
-    });
-  } catch (error) {
-    res.status(500).json({
-      message: error.message,
-    });
-  }
-};
-
 
 exports.getAllFleetStatus = async (req, res) => {
   try {
-    let { page = 1, limit = 10, from, to, date } = req.query;
+    let { page = 1, limit = 10, owner, availability, verified, date } = req.query;
 
     page = Number(page);
     limit = Number(limit);
@@ -760,19 +465,27 @@ exports.getAllFleetStatus = async (req, res) => {
     // ================= FILTER QUERY =================
     let truckQuery = {};
 
-    if (from) {
-      truckQuery["usualRoute.from"] = from.toLowerCase().trim();
+    if (owner && owner.trim()) {
+      const ownerIds = await User.find({
+        role: "truck_owner",
+        name: { $regex: owner.trim(), $options: "i" },
+      }).distinct("_id");
+      truckQuery.ownerId = { $in: ownerIds };
     }
 
-    if (to) {
-      truckQuery["usualRoute.to"] = to.toLowerCase().trim();
+    if (availability && ["available", "busy"].includes(availability)) {
+      truckQuery.availability = availability;
     }
+
+    if (verified === "true") truckQuery.verified = true;
+    if (verified === "false") truckQuery.verified = { $ne: true };
 
     // ================= TOTAL =================
     const total = await Truck.countDocuments(truckQuery);
 
     const trucks = await Truck.find(truckQuery)
       .populate("ownerId", "name phone verificationStatus")
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
       .lean();
@@ -827,13 +540,16 @@ exports.getAllFleetStatus = async (req, res) => {
           booking.status === "assigned" ? "Loading" : "In Transit";
       }
 
+      const routeFrom = t.usualRoute?.from;
+
       const isAvailableForNewTrip =
         t.availability === "available" &&
-        currentCity === t.usualRoute.from;
+        (!routeFrom || currentCity === routeFrom);
 
       const isAvailableForReturnTrip =
         t.availability === "busy" &&
-        currentCity !== t.usualRoute.from;
+        !!routeFrom &&
+        currentCity !== routeFrom;
 
       if (isAvailableForReturnTrip) tripType = "return";
 
@@ -845,10 +561,12 @@ exports.getAllFleetStatus = async (req, res) => {
         capacity: t.capacity,
 
         currentLocation: t.currentLocation,
+        baseLocation: t.baseLocation,
+        verified: !!t.verified,
 
         route: {
-          from: t.usualRoute.from,
-          to: t.usualRoute.to,
+          from: t.usualRoute?.from,
+          to: t.usualRoute?.to,
         },
 
         owner: {
@@ -875,10 +593,6 @@ exports.getAllFleetStatus = async (req, res) => {
         isAvailableForReturnTrip,
         tripType,
         images: t.images || [],
-        pricing: {
-          normalPrice: getCompanyPrice(t.pricing?.normalPrice || 0),
-          returnPrice: getCompanyPrice(t.pricing?.returnPrice || 0),
-        },
       };
     });
 
@@ -887,7 +601,7 @@ exports.getAllFleetStatus = async (req, res) => {
       total,
       page,
       pages: Math.ceil(total / limit),
-      filters: { from, to, date },
+      filters: { owner: owner || "", availability: availability || "", verified: verified || "" },
       data,
     });
 
@@ -1039,82 +753,6 @@ exports.getDashboardStats = async (req, res) => {
     });
   }
 };
-exports.getAllBookingsAdmin = async (req, res) => {
-  try {
-    let {
-      page = 1,
-      limit = 10,
-      status,
-      tripType, // return / fresh
-      search,   // optional (truckNumber / company name later)
-      sort = "latest",
-    } = req.query;
-
-    page = Number(page);
-    limit = Number(limit);
-
-    // ================= FILTER =================
-    let query = {};
-
-    if (status) {
-      query.status = status; // pending / accepted / completed / cancelled
-    }
-
-    if (tripType === "return") {
-      query.isReturnTrip = true;
-    }
-
-    if (tripType === "fresh") {
-      query.isReturnTrip = false;
-    }
-
-    // ================= SEARCH (basic) =================
-    if (search) {
-      query.$or = [
-        { truckNumber: { $regex: search, $options: "i" } },
-      ];
-    }
-
-    // ================= SORT =================
-    let sortOption = { createdAt: -1 }; // default latest
-
-    if (sort === "oldest") {
-      sortOption = { createdAt: 1 };
-    }
-
-    // ================= QUERY =================
-    const total = await Booking.countDocuments(query);
-
-const bookings = await Booking.find(query)
-      .populate("companyId", "name phone email  ")
-      .populate("truckId", "truckNumber type capacity")
-      .populate("driverId", "name phone")
-      .sort(sortOption)
-      .skip((page - 1) * limit)
-      .limit(limit);
-
-    const mappedBookings = bookings.map(b => {
-      const bObj = b.toObject ? b.toObject() : b;
-      bObj.basePrice = bObj.price;
-      bObj.price = getCompanyPrice(bObj.price);
-      return bObj;
-    });
-
-    // ================= RESPONSE =================
-    res.json({
-      total,
-      page,
-      pages: Math.ceil(total / limit),
-      bookings: mappedBookings,
-    });
-
-  } catch (error) {
-    res.status(500).json({
-      message: error.message,
-    });
-  }
-};
-
 exports.getAllRequirements = async (req, res) => {
   try {
     let { page = 1, limit = 10, status, search } = req.query;
@@ -1133,6 +771,12 @@ exports.getAllRequirements = async (req, res) => {
       ];
     }
 
+    // Keep status truthful — flip elapsed active requirements to "expired".
+    await Requirement.updateMany(
+      { status: "active", expiresAt: { $lt: new Date() } },
+      { status: "expired" }
+    );
+
     const total = await Requirement.countDocuments(query);
 
     const requirements = await Requirement.find(query)
@@ -1142,48 +786,75 @@ exports.getAllRequirements = async (req, res) => {
       .limit(limit)
       .lean();
 
-    // 🔥 offer count
-    const ids = requirements.map((r) => r._id);
-
-    const offerCounts = await Offer.aggregate([
-      { $match: { requirementId: { $in: ids } } },
-      { $group: { _id: "$requirementId", count: { $sum: 1 } } },
-    ]);
-
-    const countMap = {};
-    offerCounts.forEach((o) => {
-      countMap[o._id] = o.count;
+    // 🔗 booking (truck + owner) for fulfilled requirements
+    const fulfilledIds = requirements.filter((r) => r.status === "fulfilled").map((r) => r._id);
+    const bookings = fulfilledIds.length
+      ? await Booking.find({ requirementId: { $in: fulfilledIds } })
+          .populate({
+            path: "truckId",
+            select: "truckNumber type capacity images ownerId",
+            populate: { path: "ownerId", select: "name phone" },
+          })
+          .lean()
+      : [];
+    const bkMap = {};
+    bookings.forEach((b) => {
+      if (b.requirementId) bkMap[b.requirementId.toString()] = b;
     });
 
-    // 🔥 FINAL FORMAT (FULL DATA)
-    const data = requirements.map((r) => ({
-      _id: r._id,
+    const now = Date.now();
+    const data = requirements.map((r) => {
+      const bk = bkMap[r._id.toString()];
+      const t = bk?.truckId;
+      return {
+        _id: r._id,
 
-      // 📍 ROUTE
-      pickupCity: r.pickupCity,
-      dropCity: r.dropCity,
+        pickupCity: r.pickupCity,
+        dropCity: r.dropCity,
 
-      // 📦 DETAILS
-      goodsType: r.goodsType,
-      weight: r.weight,
-      truckType: r.truckType,
-      preferredDate: r.preferredDate,
-      additionalNotes: r.additionalNotes,
+        goodsType: r.goodsType,
+        weight: r.weight,
+        truckType: r.truckType,
+        preferredDate: r.preferredDate,
+        preferredTime: r.preferredTime,
+        budget: r.budget,
+        additionalNotes: r.additionalNotes,
 
-      // 🏢 COMPANY
-      company: {
-        _id: r.companyId?._id,
-        name: r.companyId?.name,
-        email: r.companyId?.email,
-        phone: r.companyId?.phone,
-      },
+        company: {
+          _id: r.companyId?._id,
+          name: r.companyId?.name,
+          email: r.companyId?.email,
+          phone: r.companyId?.phone,
+        },
 
-      // 📊 META
-      status: r.status,
-      offerCount: countMap[r._id] || 0,
-
-      createdAt: r.createdAt,
-    }));
+        status: r.status,
+        expiresAt: r.expiresAt,
+        createdAt: r.createdAt,
+        isExpired:
+          r.status === "expired" ||
+          (r.status === "active" && r.expiresAt && new Date(r.expiresAt).getTime() < now),
+        booking: bk
+          ? {
+              _id: bk._id,
+              status: bk.status,
+              price: bk.price,
+              createdAt: bk.createdAt,
+              truck: t
+                ? {
+                    _id: t._id,
+                    truckNumber: t.truckNumber,
+                    type: t.type,
+                    capacity: t.capacity,
+                    images: t.images || [],
+                    owner: t.ownerId
+                      ? { _id: t.ownerId._id, name: t.ownerId.name, phone: t.ownerId.phone }
+                      : null,
+                  }
+                : null,
+            }
+          : null,
+      };
+    });
 
     res.json({
       total,
@@ -1197,107 +868,3 @@ exports.getAllRequirements = async (req, res) => {
   }
 };
 
-exports.getRequirementOffersAdmin = async (req, res) => {
-  try {
-    const { requirementId } = req.params;
-
-    const requirement = await Requirement.findById(requirementId);
-
-    if (!requirement) {
-      return res.status(404).json({ message: "Requirement not found" });
-    }
-
-    const offers = await Offer.find({ requirementId })
-      .populate("truckOwnerId", "name phone")
-      .populate("truckId")
-      .populate("driverId", "name phone")
-      .lean();
-
-    const formatted = offers.map((o) => {
-      const t = o.truckId;
-
-      const isReturn =
-        t.usualRoute.from === requirement.dropCity.city &&
-        t.usualRoute.to === requirement.pickupCity.city;
-
-      const price = isReturn
-        ? t.pricing.returnPrice
-        : t.pricing.normalPrice;
-
-      return {
-        _id: o._id,
-
-        truckOwner: o.truckOwnerId,
-        driver: o.driverId,
-
-        truck: {
-          _id: t._id,
-          truckNumber: t.truckNumber,
-          capacity: t.capacity,
-          type: t.type,
-        },
-
-        isReturn,
-        basePrice: price,
-        price: getCompanyPrice(price),
-        status: o.status,
-      };
-    });
-
-    res.json({
-      requirement: {
-        _id: requirement._id,
-        pickupCity: requirement.pickupCity,
-        dropCity: requirement.dropCity,
-        goodsType: requirement.goodsType,
-        weight: requirement.weight,
-        truckType: requirement.truckType,
-        preferredDate: requirement.preferredDate,
-        status: requirement.status,
-      },
-      total: formatted.length,
-      data: formatted,
-      offers: formatted,
-    });
-
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-exports.updateTruckPricing = async (req, res) => {
-  try {
-    const { truckId } = req.params;
-    const { normalPrice, returnPrice } = req.body;
-
-    if (normalPrice === undefined || returnPrice === undefined) {
-      return res.status(400).json({ message: "Both normalPrice and returnPrice are required" });
-    }
-
-    const nPrice = Number(normalPrice);
-    const rPrice = Number(returnPrice);
-
-    if (isNaN(nPrice) || isNaN(rPrice) || nPrice < 0 || rPrice < 0) {
-      return res.status(400).json({ message: "Pricing values must be valid non-negative numbers" });
-    }
-
-    const truck = await Truck.findById(truckId);
-    if (!truck) {
-      return res.status(404).json({ message: "Truck not found" });
-    }
-
-    truck.pricing = {
-      normalPrice: getActualPrice(nPrice),
-      returnPrice: getActualPrice(rPrice)
-    };
-
-    await truck.save();
-
-    res.json({
-      message: "Truck pricing updated successfully",
-      truck: markupTruck(truck)
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};

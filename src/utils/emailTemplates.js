@@ -9,10 +9,3 @@ exports.driverCredentialsTemplate = (name, email, password) => `
   </ul>
   <p>Please log in to your account using the credentials provided above.</p>
 `;
-
-// Company Representative Email
-exports.representativeTemplate = (name, companyName) => `
-  <h3>Hello ${name},</h3>
-  <p>You have been added as a representative for <b>${companyName}</b>.</p>
-  <p>You will be able to manage bookings once the company is approved.</p>
-`;

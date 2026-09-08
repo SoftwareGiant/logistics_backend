@@ -5,8 +5,8 @@ const { authorizeRoles } = require("../middlewares/roleMiddleware");
 const Payout = require("../models/payoutModel");
 const User = require("../models/userModel");
 
-// ─── Driver: Create payout request ───────────────────────────────────────────
-router.post("/request", protect, authorizeRoles("driver"), async (req, res) => {
+// ─── Truck owner: Create payout request ──────────────────────────────────────
+router.post("/request", protect, authorizeRoles("truck_owner"), async (req, res) => {
   try {
     const { amount } = req.body;
 
@@ -14,13 +14,12 @@ router.post("/request", protect, authorizeRoles("driver"), async (req, res) => {
       return res.status(400).json({ message: "Valid payout amount is required" });
     }
 
-    // Check if driver has bank details
-    const driver = await User.findById(req.user._id);
+    const owner = await User.findById(req.user._id);
     if (
-      !driver.bankDetails ||
-      !driver.bankDetails.accountHolderName ||
-      !driver.bankDetails.ifsc ||
-      !driver.bankDetails.accountNumber
+      !owner.bankDetails ||
+      !owner.bankDetails.accountHolderName ||
+      !owner.bankDetails.ifsc ||
+      !owner.bankDetails.accountNumber
     ) {
       return res.status(400).json({
         message: "Please add your bank details before requesting a payout",
@@ -29,7 +28,7 @@ router.post("/request", protect, authorizeRoles("driver"), async (req, res) => {
 
     // Check for existing pending payout
     const existingPending = await Payout.findOne({
-      driverId: req.user._id,
+      ownerId: req.user._id,
       status: "pending",
     });
     if (existingPending) {
@@ -39,12 +38,12 @@ router.post("/request", protect, authorizeRoles("driver"), async (req, res) => {
     }
 
     const payout = await Payout.create({
-      driverId: req.user._id,
+      ownerId: req.user._id,
       amount,
       bankDetails: {
-        accountHolderName: driver.bankDetails.accountHolderName,
-        ifsc: driver.bankDetails.ifsc,
-        accountNumber: driver.bankDetails.accountNumber,
+        accountHolderName: owner.bankDetails.accountHolderName,
+        ifsc: owner.bankDetails.ifsc,
+        accountNumber: owner.bankDetails.accountNumber,
       },
     });
 
@@ -55,7 +54,7 @@ router.post("/request", protect, authorizeRoles("driver"), async (req, res) => {
       admins.forEach((admin) => {
         io.to(`user:${admin._id}`).emit("notification", {
           title: "New Payout Request 💰",
-          body: `Driver ${req.user.name} has requested a payout of ₹${Number(amount).toLocaleString("en-IN")}`,
+          body: `${req.user.name} has requested a payout of ₹${Number(amount).toLocaleString("en-IN")}`,
           url: "/dashboard/admin/payouts",
         });
       });
@@ -71,10 +70,10 @@ router.post("/request", protect, authorizeRoles("driver"), async (req, res) => {
   }
 });
 
-// ─── Driver: Get my payouts ──────────────────────────────────────────────────
-router.get("/my", protect, authorizeRoles("driver"), async (req, res) => {
+// ─── Truck owner: Get my payouts ─────────────────────────────────────────────
+router.get("/my", protect, authorizeRoles("truck_owner"), async (req, res) => {
   try {
-    const payouts = await Payout.find({ driverId: req.user._id })
+    const payouts = await Payout.find({ ownerId: req.user._id })
       .sort({ createdAt: -1 })
       .limit(20);
 
@@ -104,7 +103,7 @@ router.get(
       const total = await Payout.countDocuments(query);
 
       const payouts = await Payout.find(query)
-        .populate("driverId", "name phone email bankDetails")
+        .populate("ownerId", "name phone email bankDetails")
         .populate("processedBy", "name")
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
@@ -155,13 +154,13 @@ router.put(
       // 🔔 Notify driver
       const io = req.app.get("io");
       if (io) {
-        io.to(`user:${payout.driverId}`).emit("notification", {
+        io.to(`user:${payout.ownerId}`).emit("notification", {
           title: status === "approved" ? "Payout Approved ✅" : "Payout Rejected ❌",
           body:
             status === "approved"
               ? `Your payout request of ₹${payout.amount.toLocaleString("en-IN")} has been approved!`
               : `Your payout request of ₹${payout.amount.toLocaleString("en-IN")} was rejected. ${adminNote || ""}`,
-          url: "/dashboard/driver",
+          url: "/dashboard/truck-owner/earnings",
         });
       }
 

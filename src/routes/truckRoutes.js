@@ -1,11 +1,10 @@
 const express = require("express");
 const router = express.Router();
 
-const { searchTrucks, getOwnerFleet, updateTruckLocation, checkTruckExists } = require("../controllers/truckController");
+const { getOwnerFleet, updateTruckLocation, checkTruckExists } = require("../controllers/truckController");
 const { protect } = require("../middlewares/authMiddleware");
 const { authorizeRoles } = require("../middlewares/roleMiddleware");
 
-router.get("/search", searchTrucks);
 router.get(
   "/owner/fleet",
   protect,
@@ -13,10 +12,11 @@ router.get(
   getOwnerFleet
 );
 
+// The owner keeps the truck's live location fresh (no driver login).
 router.put(
   "/update-location",
   protect,
-  authorizeRoles("driver"),
+  authorizeRoles("truck_owner"),
   updateTruckLocation
 );
 

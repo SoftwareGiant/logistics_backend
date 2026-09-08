@@ -7,24 +7,13 @@ const Truck = require("../models/truckModel");
 
 const generateToken = require("../utils/generateToken");
 
-const sanitizeRepresentatives = (representatives = []) =>
-  representatives.map(({ password, ...rep }) => rep);
-
 // ================= REGISTER COMPANY =================
 exports.registerCompany = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-    const {
-      name,
-      phone,
-      password,
-      companyName,
-      location,
-      gstNumber,
-      representatives = [],
-    } = req.body;
+    const { name, phone, password, companyName, location, gstNumber } = req.body;
 
     // 🔍 validation
     if (!name || !password || !phone) {
@@ -34,7 +23,6 @@ exports.registerCompany = async (req, res) => {
     if (!companyName || !location) {
       throw new Error("Company details required");
     }
-
 
     const existingUser = await User.findOne({ phone }).session(session);
 
@@ -55,82 +43,20 @@ exports.registerCompany = async (req, res) => {
       { session }
     );
 
-    const ownerId = owner._id;
-
-    // ================= 👨‍💼 CREATE REPRESENTATIVES =================
-    let createdRepresentatives = [];
-    let repDocsForCompany = [];
-
-    if (representatives.length > 0) {
-      for (let i = 0; i < representatives.length; i++) {
-        const rep = representatives[i];
-
-        if (!rep?.name || !rep.phone || !rep.password) {
-          throw new Error(`Invalid representative data at index ${i}`);
-        }
-
-        // 🔍 duplicate check
-        const existingRep = await User.findOne({ phone: rep.phone }).session(session);
-
-        if (existingRep) {
-          throw new Error(`Representative already exists at index ${i}`);
-        }
-
-        // 🔥 use create() so pre-save hook runs for password hashing
-        const [createdRep] = await User.create(
-          [
-            {
-              name: rep.name,
-              phone: rep.phone,
-              password: rep.password, // 🔥 will be hashed by pre-save hook
-              role: "company_staff",
-              createdBy: ownerId,
-            },
-          ],
-          { session }
-        );
-
-        createdRepresentatives.push(createdRep);
-
-        // 🔥 prepare for company schema
-        repDocsForCompany.push({
-          name: rep.name,
-          phone: rep.phone,
-        });
-      }
-    }
-
     // ================= 🏢 CREATE COMPANY =================
     const [company] = await Company.create(
       [
         {
-          userId: ownerId,
+          userId: owner._id,
           companyName,
           location,
           gstNumber,
-          representatives: repDocsForCompany, // 🔥 FIX HERE
         },
       ],
       { session }
     );
 
-    // 🔗 link owner
-    await User.findByIdAndUpdate(
-      ownerId,
-      { companyId: company._id },
-      { session }
-    );
-
-    // 🔗 link reps
-    if (createdRepresentatives.length > 0) {
-      const repIds = createdRepresentatives.map((r) => r._id);
-
-      await User.updateMany(
-        { _id: { $in: repIds } },
-        { companyId: company._id },
-        { session }
-      );
-    }
+    await User.findByIdAndUpdate(owner._id, { companyId: company._id }, { session });
 
     await session.commitTransaction();
     session.endSession();
@@ -139,9 +65,7 @@ exports.registerCompany = async (req, res) => {
       message: "Company registered, pending approval",
       owner,
       company,
-      representatives: createdRepresentatives,
     });
-
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
@@ -163,7 +87,6 @@ exports.registerTruckOwner = async (req, res) => {
       phone,
       password,
       trucks = [],
-      drivers = [],
     } = req.body;
 
     if (!name || !password || !phone) {
@@ -194,16 +117,13 @@ exports.registerTruckOwner = async (req, res) => {
 
     if (trucks.length > 0) {
       const truckDocs = trucks.map((t, index) => {
-        if (
-          !t.truckNumber ||
-          !t.capacity ||
-          !t.type ||
-          !t.usualRoute?.from ||
-          !t.usualRoute?.to ||
-          !t.pricing?.normalPrice ||
-          !t.pricing?.returnPrice
-        ) {
+        if (!t.truckNumber || !t.capacity || !t.type) {
           throw new Error(`Invalid truck data at index ${index}`);
+        }
+
+        const coords = t.baseLocation?.coordinates;
+        if (!Array.isArray(coords) || coords.length !== 2) {
+          throw new Error(`Truck location is required at index ${index}`);
         }
 
         return {
@@ -211,61 +131,18 @@ exports.registerTruckOwner = async (req, res) => {
           truckNumber: t.truckNumber.trim().toUpperCase(),
           capacity: t.capacity,
           type: t.type,
-          usualRoute: {
-            from: t.usualRoute.from.toLowerCase().trim(),
-            to: t.usualRoute.to.toLowerCase().trim(),
-            averageTime: t.usualRoute.averageTime ? t.usualRoute.averageTime.trim() : undefined,
-          },
-          currentLocation: {
-            city: t.currentLocation?.city
-              ? t.currentLocation.city.toLowerCase().trim()
-              : t.usualRoute.from.toLowerCase().trim(),
-
-            coordinates: t.currentLocation?.coordinates || [0, 0],
-          },
-          pricing: {
-            normalPrice: t.pricing.normalPrice,
-            returnPrice: t.pricing.returnPrice,
-          },
           availability: "available",
+          verified: false,
+          baseLocation: {
+            address: t.baseLocation.address || undefined,
+            city: t.baseLocation.city ? t.baseLocation.city.toLowerCase().trim() : undefined,
+            coordinates: [Number(coords[0]), Number(coords[1])],
+          },
           images: Array.isArray(t.images) ? t.images : [],
         };
       });
 
       createdTrucks = await Truck.insertMany(truckDocs, { session });
-    }
-
-    let createdDrivers = [];
-
-    if (drivers.length > 0) {
-      for (let i = 0; i < drivers.length; i++) {
-        const d = drivers[i];
-
-        if (!d.name || !d.phone || !d.password) {
-          throw new Error(`Name, phone number, and password are required for driver at index ${i}`);
-        }
-
-        // 🔥 use create() instead of insertMany() so pre-save hook runs for password hashing
-        const [driver] = await User.create(
-          [
-            {
-              name: d.name,
-              phone: d.phone,
-              password: d.password, // 🔥 will be hashed by pre-save hook
-              role: "driver",
-              truckOwnerId: ownerId,
-              assignedTruckId:
-                typeof d.truckIndex === "number"
-                  ? createdTrucks[d.truckIndex]?._id
-                  : null,
-              createdBy: ownerId,
-            },
-          ],
-          { session }
-        );
-
-        createdDrivers.push(driver);
-      }
     }
 
     await session.commitTransaction();
@@ -275,11 +152,6 @@ exports.registerTruckOwner = async (req, res) => {
       message: "Truck owner registered, pending approval",
       owner,
       trucks: createdTrucks,
-      drivers: createdDrivers.map((d) => ({
-        _id: d._id,
-        name: d.name,
-        phone: d.phone,
-      })),
     });
   } catch (error) {
     await session.abortTransaction();

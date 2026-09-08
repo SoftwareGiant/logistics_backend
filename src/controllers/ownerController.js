@@ -1,7 +1,6 @@
 const Booking = require("../models/bookingModel");
 const Truck = require("../models/truckModel");
 const User = require("../models/userModel");
-const Offer = require("../models/offerModel");
 const bcrypt = require("bcrypt");
 
 exports.getOwnerDashboardStats = async (req, res) => {
@@ -181,23 +180,14 @@ exports.addTruck = async (req, res) => {
       type,
       usualRoute,
       currentLocation,
-      pricing,
+      baseLocation,
       images,
     } = req.body;
 
     // 🔍 validation
-    if (
-      !truckNumber ||
-      !capacity ||
-      !type ||
-      !usualRoute?.from ||
-      !usualRoute?.to ||
-      !pricing?.normalPrice ||
-      !pricing?.returnPrice
-    ) {
+    if (!truckNumber || !capacity || !type) {
       return res.status(400).json({
-        message:
-          "All fields required: truckNumber, capacity, type, usualRoute (from, to), pricing (normalPrice, returnPrice)",
+        message: "All fields required: truckNumber, capacity, type",
       });
     }
 
@@ -213,26 +203,34 @@ exports.addTruck = async (req, res) => {
     }
 
     // 🚛 create truck
+    const locCoords = baseLocation?.coordinates || currentLocation?.coordinates;
     const truck = await Truck.create({
       ownerId,
       truckNumber: truckNumber.trim().toUpperCase(),
       capacity,
       type,
-      usualRoute: {
-        from: usualRoute.from.toLowerCase().trim(),
-        to: usualRoute.to.toLowerCase().trim(),
-        averageTime: usualRoute.averageTime ? usualRoute.averageTime.trim() : undefined,
-      },
-      currentLocation: {
-        city: currentLocation?.city
-          ? currentLocation.city.toLowerCase().trim()
-          : usualRoute.from.toLowerCase().trim(),
-        coordinates: currentLocation?.coordinates || [0, 0],
-      },
-      pricing: {
-        normalPrice: pricing.normalPrice,
-        returnPrice: pricing.returnPrice,
-      },
+      usualRoute: usualRoute?.from
+        ? {
+            from: usualRoute.from.toLowerCase().trim(),
+            to: usualRoute.to?.toLowerCase().trim(),
+            averageTime: usualRoute.averageTime ? usualRoute.averageTime.trim() : undefined,
+          }
+        : undefined,
+      baseLocation:
+        Array.isArray(locCoords) && locCoords.length === 2
+          ? {
+              address: baseLocation?.address || undefined,
+              city: baseLocation?.city ? baseLocation.city.toLowerCase().trim() : undefined,
+              coordinates: [Number(locCoords[0]), Number(locCoords[1])],
+            }
+          : undefined,
+      currentLocation: currentLocation?.coordinates
+        ? {
+            city: currentLocation?.city ? currentLocation.city.toLowerCase().trim() : undefined,
+            coordinates: currentLocation.coordinates,
+          }
+        : undefined,
+      verified: false,
       availability: "available",
       images: Array.isArray(images) ? images : [],
     });
@@ -329,24 +327,15 @@ exports.addTruckWithDriver = async (req, res) => {
       type,
       usualRoute,
       currentLocation,
-      pricing,
+      baseLocation,
       driver,
       images,
     } = req.body;
 
     // 🔍 truck validation
-    if (
-      !truckNumber ||
-      !capacity ||
-      !type ||
-      !usualRoute?.from ||
-      !usualRoute?.to ||
-      !pricing?.normalPrice ||
-      !pricing?.returnPrice
-    ) {
+    if (!truckNumber || !capacity || !type) {
       return res.status(400).json({
-        message:
-          "Truck fields required: truckNumber, capacity, type, usualRoute (from, to), pricing (normalPrice, returnPrice)",
+        message: "Truck fields required: truckNumber, capacity, type",
       });
     }
 
@@ -387,26 +376,34 @@ exports.addTruckWithDriver = async (req, res) => {
     }
 
     // 🚛 create truck
+    const locCoords = baseLocation?.coordinates || currentLocation?.coordinates;
     const createdTruck = await Truck.create({
       ownerId,
       truckNumber: truckNumber.trim().toUpperCase(),
       capacity,
       type,
-      usualRoute: {
-        from: usualRoute.from.toLowerCase().trim(),
-        to: usualRoute.to.toLowerCase().trim(),
-        averageTime: usualRoute.averageTime ? usualRoute.averageTime.trim() : undefined,
-      },
-      currentLocation: {
-        city: currentLocation?.city
-          ? currentLocation.city.toLowerCase().trim()
-          : usualRoute.from.toLowerCase().trim(),
-        coordinates: currentLocation?.coordinates || [0, 0],
-      },
-      pricing: {
-        normalPrice: pricing.normalPrice,
-        returnPrice: pricing.returnPrice,
-      },
+      usualRoute: usualRoute?.from
+        ? {
+            from: usualRoute.from.toLowerCase().trim(),
+            to: usualRoute.to?.toLowerCase().trim(),
+            averageTime: usualRoute.averageTime ? usualRoute.averageTime.trim() : undefined,
+          }
+        : undefined,
+      baseLocation:
+        Array.isArray(locCoords) && locCoords.length === 2
+          ? {
+              address: baseLocation?.address || undefined,
+              city: baseLocation?.city ? baseLocation.city.toLowerCase().trim() : undefined,
+              coordinates: [Number(locCoords[0]), Number(locCoords[1])],
+            }
+          : undefined,
+      currentLocation: currentLocation?.coordinates
+        ? {
+            city: currentLocation?.city ? currentLocation.city.toLowerCase().trim() : undefined,
+            coordinates: currentLocation.coordinates,
+          }
+        : undefined,
+      verified: false,
       availability: "available",
       images: Array.isArray(images) ? images : [],
     });
@@ -456,17 +453,9 @@ exports.addMultipleTrucksAndDrivers = async (req, res) => {
 
     // 🔍 validate trucks
     trucks.forEach((t, index) => {
-      if (
-        !t.truckNumber ||
-        !t.capacity ||
-        !t.type ||
-        !t.usualRoute?.from ||
-        !t.usualRoute?.to ||
-        !t.pricing?.normalPrice ||
-        !t.pricing?.returnPrice
-      ) {
+      if (!t.truckNumber || !t.capacity || !t.type) {
         throw new Error(
-          `Invalid truck data at index ${index}: all required fields missing`
+          `Invalid truck data at index ${index}: truckNumber, capacity and type are required`
         );
       }
     });
@@ -534,29 +523,39 @@ exports.addMultipleTrucksAndDrivers = async (req, res) => {
     }
 
     // 🚛 create trucks
-    const truckDocs = trucks.map((t) => ({
-      ownerId,
-      truckNumber: t.truckNumber.trim().toUpperCase(),
-      capacity: t.capacity,
-      type: t.type,
-      usualRoute: {
-        from: t.usualRoute.from.toLowerCase().trim(),
-        to: t.usualRoute.to.toLowerCase().trim(),
-        averageTime: t.usualRoute.averageTime ? t.usualRoute.averageTime.trim() : undefined,
-      },
-      currentLocation: {
-        city: t.currentLocation?.city
-          ? t.currentLocation.city.toLowerCase().trim()
-          : t.usualRoute.from.toLowerCase().trim(),
-        coordinates: t.currentLocation?.coordinates || [0, 0],
-      },
-      pricing: {
-        normalPrice: t.pricing.normalPrice,
-        returnPrice: t.pricing.returnPrice,
-      },
-      availability: "available",
-      images: Array.isArray(t.images) ? t.images : [],
-    }));
+    const truckDocs = trucks.map((t) => {
+      const locCoords = t.baseLocation?.coordinates || t.currentLocation?.coordinates;
+      return {
+        ownerId,
+        truckNumber: t.truckNumber.trim().toUpperCase(),
+        capacity: t.capacity,
+        type: t.type,
+        usualRoute: t.usualRoute?.from
+          ? {
+              from: t.usualRoute.from.toLowerCase().trim(),
+              to: t.usualRoute.to?.toLowerCase().trim(),
+              averageTime: t.usualRoute.averageTime ? t.usualRoute.averageTime.trim() : undefined,
+            }
+          : undefined,
+        baseLocation:
+          Array.isArray(locCoords) && locCoords.length === 2
+            ? {
+                address: t.baseLocation?.address || undefined,
+                city: t.baseLocation?.city ? t.baseLocation.city.toLowerCase().trim() : undefined,
+                coordinates: [Number(locCoords[0]), Number(locCoords[1])],
+              }
+            : undefined,
+        currentLocation: t.currentLocation?.coordinates
+          ? {
+              city: t.currentLocation?.city ? t.currentLocation.city.toLowerCase().trim() : undefined,
+              coordinates: t.currentLocation.coordinates,
+            }
+          : undefined,
+        verified: false,
+        availability: "available",
+        images: Array.isArray(t.images) ? t.images : [],
+      };
+    });
 
     const createdTrucks = await Truck.insertMany(truckDocs);
 
@@ -615,7 +614,7 @@ exports.updateFleetItem = async (req, res) => {
       capacity,
       type,
       usualRoute,
-      pricing,
+      baseLocation,
       driverName,
       driverPhone,
       images,
@@ -625,22 +624,6 @@ exports.updateFleetItem = async (req, res) => {
     const oldTruck = await Truck.findOne({ _id: truckId, ownerId });
     if (!oldTruck) {
       return res.status(404).json({ message: "Truck not found" });
-    }
-
-    let routeChanged = false;
-    if (usualRoute) {
-      const oldFrom = oldTruck.usualRoute?.from?.toLowerCase().trim() || "";
-      const oldTo = oldTruck.usualRoute?.to?.toLowerCase().trim() || "";
-      const newFrom = usualRoute.from?.toLowerCase().trim() || "";
-      const newTo = usualRoute.to?.toLowerCase().trim() || "";
-      
-      if (oldFrom !== newFrom || oldTo !== newTo) {
-        routeChanged = true;
-      }
-    }
-
-    if (routeChanged) {
-      await Offer.deleteMany({ truckId, status: "pending" });
     }
 
     // 1. Update Truck
@@ -655,7 +638,13 @@ exports.updateFleetItem = async (req, res) => {
         averageTime: usualRoute.averageTime?.trim(),
       };
     }
-    if (pricing) truckUpdate.pricing = pricing;
+    if (baseLocation?.coordinates?.length === 2) {
+      truckUpdate.baseLocation = {
+        address: baseLocation.address || undefined,
+        city: baseLocation.city ? baseLocation.city.toLowerCase().trim() : undefined,
+        coordinates: [Number(baseLocation.coordinates[0]), Number(baseLocation.coordinates[1])],
+      };
+    }
     if (images && Array.isArray(images)) truckUpdate.images = images;
 
     let isOccupied = false;
@@ -667,7 +656,8 @@ exports.updateFleetItem = async (req, res) => {
 
       const formattedLocation = {
         city: currentLocation.city ? currentLocation.city.toLowerCase().trim() : "",
-        coordinates: currentLocation.coordinates || [0, 0]
+        coordinates: currentLocation.coordinates || [0, 0],
+        updatedAt: new Date(),
       };
 
       if (activeBooking || oldTruck.availability === "busy") {

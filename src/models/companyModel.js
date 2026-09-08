@@ -1,18 +1,5 @@
 const mongoose = require("mongoose");
 
-const representativeSchema = new mongoose.Schema(
-  {
-    name: String,
-    email: String,
-    phone: String,
-    password: {
-      type: String,
-      minlength: 6,
-    },
-  },
-  { _id: false }
-);
-
 const companySchema = new mongoose.Schema(
   {
     userId: {
@@ -57,8 +44,6 @@ const companySchema = new mongoose.Schema(
     gstNumber: {
       type: String,
     },
-
-    representatives: [representativeSchema],
   },
   { timestamps: true }
 );

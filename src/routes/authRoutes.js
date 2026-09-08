@@ -14,11 +14,11 @@ router.post("/register/truck-owner", registerTruckOwner);
 router.post("/login", login);
 router.get("/me", protect, (req, res) => res.json({ user: req.user }));
 
-// ─── Driver Bank Details ──────────────────────────────────────────────────────
+// ─── Bank Details (truck owner — used for payouts) ────────────────────────────
 router.put("/bank-details", protect, async (req, res) => {
   try {
-    if (req.user.role !== "driver") {
-      return res.status(403).json({ message: "Only drivers can update bank details" });
+    if (req.user.role !== "truck_owner") {
+      return res.status(403).json({ message: "Only truck owners can update bank details" });
     }
 
     const { accountHolderName, ifsc, accountNumber } = req.body;

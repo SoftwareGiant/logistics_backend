@@ -2,193 +2,35 @@ const Truck = require("../models/truckModel");
 const Booking = require("../models/bookingModel");
 const User = require("../models/userModel");
 
-// ================= SEARCH TRUCKS =================
-exports.searchTrucks = async (req, res) => {
-  try {
-    let { pickup, drop } = req.query;
-
-    if (!pickup || !drop) {
-      return res.status(400).json({
-        message: "pickup and drop required",
-      });
-    }
-
-    pickup = pickup.toLowerCase().trim();
-    drop = drop.toLowerCase().trim();
-
-    // 🔥 populate owner
-    const trucks = await Truck.find({
-      $or: [
-        { "usualRoute.from": pickup, "usualRoute.to": drop },
-        { "usualRoute.from": drop, "usualRoute.to": pickup },
-      ],
-    })
-      .populate({
-        path: "ownerId",
-        select: "verificationStatus",
-      })
-      .lean();
-
-    const truckIds = trucks.map((t) => t._id);
-
-    const activeBookings = await Booking.find({
-      truckId: { $in: truckIds },
-      status: {
-        $in: ["assigned", "en_route", "picked_up", "in_transit"],
-      },
-    }).lean();
-
-    const bookingMap = {};
-    activeBookings.forEach((b) => {
-      bookingMap[b.truckId.toString()] = b;
-    });
-
-    let returnTrucks = [];
-    let newTripTrucks = [];
-
-    trucks.forEach((t) => {
-      // ❌ skip unapproved owners
-      if (t.ownerId?.verificationStatus !== "approved") return;
-
-      const getCityStr = (loc) => {
-        if (!loc) return "";
-        if (typeof loc === "string") {
-          if (loc.startsWith("{")) {
-            try {
-              const parsed = JSON.parse(loc);
-              return (parsed.city || "").toLowerCase().trim();
-            } catch (e) {}
-          }
-          return loc.toLowerCase().trim();
-        }
-        if (typeof loc === "object" && loc.city) {
-          return loc.city.toLowerCase().trim();
-        }
-        return "";
-      };
-
-      const currentCity = t.currentLocation?.city;
-      const activeBooking = bookingMap[t._id.toString()];
-      const hasActiveBooking = Boolean(activeBooking);
-      const activeBookingIsNewTrip =
-        activeBooking &&
-        getCityStr(activeBooking.pickupCity) === t.usualRoute.from &&
-        getCityStr(activeBooking.dropCity) === t.usualRoute.to;
-
-      const isNewTrip =
-        t.usualRoute.from === pickup &&
-        t.usualRoute.to === drop &&
-        currentCity === pickup &&
-        t.availability === "available" &&
-        !hasActiveBooking;
-
-      const isReverseRoute =
-        t.usualRoute.from === drop &&
-        t.usualRoute.to === pickup;
-
-      const isTruckAtPickup =
-        currentCity === pickup &&
-        t.availability === "available";
-
-      const isReturn =
-        (isReverseRoute && (isTruckAtPickup || activeBookingIsNewTrip)) ||
-        (t.isReturnTripReady && isTruckAtPickup && t.usualRoute.from === drop);
-
-      const isReadyForReturn = isReturn && isTruckAtPickup;
-      const isRunningReturn = isReturn && activeBookingIsNewTrip;
-
-      if (!isReturn && !isNewTrip) return;
-
-const getCompanyPrice = (actualPrice) => {
-  if (!actualPrice) return 0;
-  const price = Number(actualPrice);
-  if (Number.isNaN(price)) return actualPrice;
-
-  let markup = 0;
-  if (price <= 20000) {
-    markup = 0.20;
-  } else if (price <= 50000) {
-    markup = 0.10;
-  } else {
-    markup = 0.07;
-  }
-  return Math.round(price + (price * markup));
-};
-
-      const formatted = {
-        _id: t._id,
-        truckNumber: t.truckNumber,
-        capacity: t.capacity,
-        type: t.type,
-
-        from: t.usualRoute.from,
-        to: t.usualRoute.to,
-        averageTime: t.usualRoute.averageTime,
-        currentLocation: currentCity,
-
-        price: getCompanyPrice(isReturn
-          ? t.pricing.returnPrice
-          : t.pricing.normalPrice),
-
-        isReturn,
-        isNewTrip,
-        isReadyForReturn,
-        isRunningReturn,
-        images: t.images || [],
-      };
-
-      if (isReturn) returnTrucks.push(formatted);
-      if (isNewTrip) newTripTrucks.push(formatted);
-    });
-
-    returnTrucks.sort((a, b) => a.price - b.price);
-    newTripTrucks.sort((a, b) => a.price - b.price);
-
-    res.json({
-      returnTrucks,
-      newTripTrucks,
-    });
-
-  } catch (error) {
-    res.status(500).json({
-      message: error.message,
-    });
-  }
-};
-
+// The truck owner keeps a truck's live location fresh.
+// Body: { truckId, coordinates: [lng, lat], city? }
 exports.updateTruckLocation = async (req, res) => {
   try {
-    const { coordinates, city } = req.body; // coordinates: [lng, lat]
-    const driver = await User.findById(req.user._id);
+    const { truckId, coordinates, city } = req.body;
 
-    if (!driver || !driver.assignedTruckId) {
-      return res.status(400).json({
-        message: "No truck assigned to this driver",
-      });
+    if (!truckId || !Array.isArray(coordinates) || coordinates.length !== 2) {
+      return res.status(400).json({ message: "truckId and coordinates [lng, lat] are required" });
     }
 
-    const updateData = {
-      "currentLocation.coordinates": coordinates,
+    const truck = await Truck.findById(truckId);
+    if (!truck) {
+      return res.status(404).json({ message: "Truck not found" });
+    }
+    if (truck.ownerId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+
+    truck.currentLocation = {
+      ...(truck.currentLocation ? truck.currentLocation.toObject?.() || truck.currentLocation : {}),
+      coordinates: [Number(coordinates[0]), Number(coordinates[1])],
+      city: city ? city.toLowerCase() : truck.currentLocation?.city,
+      updatedAt: new Date(),
     };
+    await truck.save();
 
-    if (city) {
-      updateData["currentLocation.city"] = city.toLowerCase();
-    }
-
-    const truck = await Truck.findByIdAndUpdate(
-      driver.assignedTruckId,
-      updateData,
-      { new: true }
-    );
-
-    res.json({
-      message: "Location updated",
-      currentLocation: truck.currentLocation,
-    });
+    res.json({ message: "Location updated", currentLocation: truck.currentLocation });
   } catch (error) {
-    res.status(500).json({
-      message: error.message,
-    });
+    res.status(500).json({ message: error.message });
   }
 };
 
@@ -251,8 +93,10 @@ exports.getOwnerFleet = async (req, res) => {
         capacity: t.capacity,
         type: t.type,
         usualRoute: t.usualRoute,
+        verified: !!t.verified,
 
         currentLocation: t.currentLocation,
+        baseLocation: t.baseLocation,
         pendingLocation: t.pendingLocation,
 
         status,
@@ -260,7 +104,6 @@ exports.getOwnerFleet = async (req, res) => {
 
         availability: t.availability,
         driver: driver ? { name: driver.name, phone: driver.phone } : null,
-        pricing: t.pricing,
         images: t.images || [],
       };
     });

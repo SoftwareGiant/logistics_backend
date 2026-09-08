@@ -6,7 +6,6 @@ const bookingRoutes = require("./routes/bookingRoutes");
 const truckRoutes = require("./routes/truckRoutes");
 const ownerRoutes = require("./routes/ownerRoutes");
 const requirementRoutes = require("./routes/requirementRoutes");
-const offerRoutes = require("./routes/offerRoutes");
 const payoutRoutes = require("./routes/payoutRoutes");
 
 const app = express();
@@ -21,7 +20,6 @@ app.use("/api/trucks", truckRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/owners", ownerRoutes);
 app.use("/api/requirements", requirementRoutes);
-app.use("/api/offers", offerRoutes);
 app.use("/api/payouts", payoutRoutes);
 // Health check
 app.get("/", (req, res) => {

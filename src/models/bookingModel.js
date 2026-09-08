@@ -40,6 +40,12 @@ const bookingSchema = new mongoose.Schema(
       required: true,
     },
 
+    // The requirement this booking was created from (owner accepted it)
+    requirementId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Requirement",
+    },
+
     truckId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Truck",

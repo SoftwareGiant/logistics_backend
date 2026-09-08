@@ -64,6 +64,22 @@ const truckSchema = new mongoose.Schema(
       default: "available",
     },
 
+    // ✅ Set true when the admin approves the owner (used to match only verified trucks)
+    verified: {
+      type: Boolean,
+      default: false,
+    },
+
+    // 🏠 BASE LOCATION — captured once at registration (owner's browser location / picked place).
+    // Used as a fallback for matching when there is no fresh live location.
+    baseLocation: {
+      address: { type: String, trim: true },
+      city: { type: String, lowercase: true, trim: true },
+      coordinates: {
+        type: [Number], // [lng, lat]
+      },
+    },
+
     // 🔁 ROUTE (important for matching)
     usualRoute: {
       from: {
@@ -82,12 +98,15 @@ const truckSchema = new mongoose.Schema(
       }
     },
 
-    // 📍 CURRENT LIVE LOCATION
+    // 📍 CURRENT LIVE LOCATION (refreshed by the driver app while the truck moves)
     currentLocation: {
       city: String,
       coordinates: {
         type: [Number] // [lng, lat]
-      }
+      },
+      updatedAt: {
+        type: Date,
+      },
     },
     pendingLocation: {
       city: {
@@ -104,16 +123,6 @@ const truckSchema = new mongoose.Schema(
       from: String,
       to: String,
       completedAt: Date,
-    },
-    pricing: {
-      normalPrice: {
-        type: Number,
-        required: true
-      },
-      returnPrice: {
-        type: Number,
-        required: true
-      }
     },
 
     availability: {
@@ -135,7 +144,8 @@ const truckSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// 🔥 GEO INDEX (VERY IMPORTANT)
+// 🔥 GEO INDEXES (VERY IMPORTANT for radius matching)
 truckSchema.index({ "currentLocation.coordinates": "2dsphere" });
+truckSchema.index({ "baseLocation.coordinates": "2dsphere" });
 
 module.exports = mongoose.model("Truck", truckSchema);
