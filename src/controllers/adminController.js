@@ -772,9 +772,11 @@ exports.getAllRequirements = async (req, res) => {
     }
 
     // Keep status truthful — flip elapsed active requirements to "expired".
+    // These had matching trucks (otherwise addRequirement/updateRequirement would
+    // have already marked them "no_match"), so this is a genuine timeout.
     await Requirement.updateMany(
       { status: "active", expiresAt: { $lt: new Date() } },
-      { status: "expired" }
+      { status: "expired", expiryReason: "timeout" }
     );
 
     const total = await Requirement.countDocuments(query);
@@ -829,6 +831,7 @@ exports.getAllRequirements = async (req, res) => {
 
         status: r.status,
         expiresAt: r.expiresAt,
+        expiryReason: r.expiryReason,
         createdAt: r.createdAt,
         isExpired:
           r.status === "expired" ||
@@ -838,6 +841,8 @@ exports.getAllRequirements = async (req, res) => {
               _id: bk._id,
               status: bk.status,
               price: bk.price,
+              ownerPayout: bk.ownerPayout,
+              commissionPercent: bk.commissionPercent,
               createdAt: bk.createdAt,
               truck: t
                 ? {

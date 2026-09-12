@@ -1,5 +1,6 @@
 const Truck = require("../models/truckModel");
 const Requirement = require("../models/requirementModel");
+const { computeOwnerPayout } = require("./pricing");
 
 // A requirement is matched to trucks within this radius of its pickup point.
 const RADIUS_METERS = 10 * 1000; // 10 km
@@ -68,9 +69,10 @@ async function findMatchingTrucks(requirement, { excludeOwnerId } = {}) {
     },
   ]);
 
-  const liveIds = new Set(liveMatches.map((t) => String(t._id)));
-
-  // 2) Trucks WITHOUT a fresh live location → fall back to their base location.
+  // 2) Every other matching truck → fall back to their base location.
+  // (Not just ones with a stale/missing updatedAt — a truck can have a fresh
+  // updatedAt but no usable coordinates, e.g. right after a trip is marked
+  // delivered; it must still fall back instead of being matched nowhere.)
   const baseMatches = await Truck.aggregate([
     {
       $geoNear: {
@@ -81,10 +83,7 @@ async function findMatchingTrucks(requirement, { excludeOwnerId } = {}) {
         spherical: true,
         query: {
           ...baseMatch,
-          $or: [
-            { "currentLocation.updatedAt": { $exists: false } },
-            { "currentLocation.updatedAt": { $lt: freshSince } },
-          ],
+          _id: { $nin: liveMatches.map((t) => t._id) },
         },
       },
     },
@@ -92,9 +91,7 @@ async function findMatchingTrucks(requirement, { excludeOwnerId } = {}) {
 
   const results = [
     ...liveMatches.map((t) => ({ ...t, locationSource: "live" })),
-    ...baseMatches
-      .filter((t) => !liveIds.has(String(t._id)))
-      .map((t) => ({ ...t, locationSource: "base" })),
+    ...baseMatches.map((t) => ({ ...t, locationSource: "base" })),
   ];
 
   results.sort((a, b) => a.distanceMeters - b.distanceMeters);
@@ -141,8 +138,11 @@ async function findMatchingRequirementsForOwner(ownerId) {
 
     for (const r of reqs) {
       if (!seen.has(String(r._id))) {
+        const { ownerPayout, commissionPercent } = computeOwnerPayout(r.budget);
         seen.set(String(r._id), {
           ...r,
+          ownerPayout,
+          commissionPercent,
           matchedTruck: {
             _id: truck._id,
             truckNumber: truck.truckNumber,

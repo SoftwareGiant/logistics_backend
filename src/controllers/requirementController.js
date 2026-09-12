@@ -6,6 +6,7 @@ const {
   findMatchingRequirementsForOwner,
   isRequirementLive,
 } = require("../services/matching");
+const { computeOwnerPayout } = require("../services/pricing");
 
 const MATCH_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -68,6 +69,7 @@ exports.addRequirement = async (req, res) => {
     const matches = await findMatchingTrucks(requirement);
     if (matches.length === 0) {
       requirement.status = "expired";
+      requirement.expiryReason = "no_match";
       await requirement.save();
     }
 
@@ -130,12 +132,14 @@ exports.updateRequirement = async (req, res) => {
 
     requirement.status = "active";
     requirement.expiresAt = new Date(Date.now() + MATCH_WINDOW_MS);
+    requirement.expiryReason = undefined;
     await requirement.save();
 
     // Still no matching truck in range → keep it out of the timed flow.
     const matches = await findMatchingTrucks(requirement);
     if (matches.length === 0) {
       requirement.status = "expired";
+      requirement.expiryReason = "no_match";
       await requirement.save();
     }
 
@@ -199,6 +203,7 @@ exports.acceptRequirement = async (req, res) => {
     }
 
     try {
+      const { ownerPayout, commissionPercent } = computeOwnerPayout(claimed.budget);
       const booking = await Booking.create({
         companyId: claimed.companyId,
         requirementId: claimed._id,
@@ -210,6 +215,8 @@ exports.acceptRequirement = async (req, res) => {
         weight: claimed.weight,
         pickupDate: claimed.preferredDate,
         price: claimed.budget || 0,
+        ownerPayout,
+        commissionPercent,
         status: "assigned",
       });
 
@@ -278,7 +285,7 @@ exports.getMyRequirements = async (req, res) => {
     // Lazily flip elapsed active requirements to "expired" so status stays truthful.
     await Requirement.updateMany(
       { companyId, status: "active", expiresAt: { $lt: new Date() } },
-      { status: "expired" }
+      { status: "expired", expiryReason: "timeout" }
     );
 
     const requirements = await Requirement.find({ companyId }).sort({ createdAt: -1 }).lean();

@@ -71,10 +71,15 @@ const bookingSchema = new mongoose.Schema(
 
     weight: Number,
 
+    // What the company pays (= the requirement's budget at the time of acceptance)
     price: {
       type: Number,
       required: true,
     },
+
+    // What the truck owner actually receives after the platform commission
+    ownerPayout: Number,
+    commissionPercent: Number,
 
     pickupDate: Date,
 

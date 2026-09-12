@@ -102,6 +102,15 @@ const requirementSchema = new mongoose.Schema(
       type: Date,
       default: () => new Date(Date.now() + 30 * 60 * 1000),
     },
+
+    // Why an "expired" requirement never got booked:
+    //  "no_match"  — no matching truck was in range when posted/edited, so the
+    //                30-minute window was never really live.
+    //  "timeout"   — trucks were matched but none accepted before the window closed.
+    expiryReason: {
+      type: String,
+      enum: ["no_match", "timeout"],
+    },
   },
   { timestamps: true }
 );

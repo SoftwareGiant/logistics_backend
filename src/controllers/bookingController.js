@@ -21,6 +21,16 @@ const extractCityName = (loc) => {
   return "unknown";
 };
 
+// pickupCity/dropCity are stored as either GeoJSON ({ coordinates: { coordinates: [lng, lat] } })
+// or a flat [lng, lat] pair — pull out a flat pair either way.
+const extractCoordinates = (loc) => {
+  const raw = loc?.coordinates?.coordinates || loc?.coordinates;
+  if (Array.isArray(raw) && raw.length === 2) {
+    return [Number(raw[0]), Number(raw[1])];
+  }
+  return null;
+};
+
 // ================= OWNER DRIVES THE TRIP =================
 // A booking only exists once a truck owner has accepted a requirement
 // (requirementController.acceptRequirement), so it always arrives here as "assigned".
@@ -76,17 +86,22 @@ exports.updateBookingByOwner = async (req, res) => {
 
         const truck = await Truck.findById(booking.truckId._id);
         const updateData = { availability: "available" };
+        // Never drop the truck out of matching by leaving coordinates unset —
+        // fall through pendingLocation -> drop city -> whatever it already had.
+        const fallbackCoords =
+          truck?.currentLocation?.coordinates || truck?.baseLocation?.coordinates || undefined;
 
         if (truck && truck.pendingLocation && truck.pendingLocation.city) {
           updateData.currentLocation = {
             city: truck.pendingLocation.city,
-            coordinates: truck.pendingLocation.coordinates || [0, 0],
+            coordinates: truck.pendingLocation.coordinates || fallbackCoords,
             updatedAt: new Date(),
           };
           updateData.pendingLocation = null;
         } else {
           updateData.currentLocation = {
             city: extractCityName(booking.dropCity),
+            coordinates: extractCoordinates(booking.dropCity) || fallbackCoords,
             updatedAt: new Date(),
           };
         }
