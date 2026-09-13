@@ -69,10 +69,13 @@ async function findMatchingTrucks(requirement, { excludeOwnerId } = {}) {
     },
   ]);
 
-  // 2) Every other matching truck → fall back to their base location.
-  // (Not just ones with a stale/missing updatedAt — a truck can have a fresh
-  // updatedAt but no usable coordinates, e.g. right after a trip is marked
-  // delivered; it must still fall back instead of being matched nowhere.)
+  // 2) Trucks whose live location isn't trustworthy → fall back to their base
+  // location. "Not trustworthy" means stale/missing updatedAt, OR a fresh
+  // updatedAt with no usable coordinates (e.g. right after a trip is marked
+  // delivered). A truck with a FRESH, VALID live location that's simply too
+  // far away must NOT fall back to base — we know exactly where it is, and
+  // it isn't here, so it should be excluded rather than matched via a stale
+  // "home base" it may be nowhere near right now.
   const baseMatches = await Truck.aggregate([
     {
       $geoNear: {
@@ -83,7 +86,12 @@ async function findMatchingTrucks(requirement, { excludeOwnerId } = {}) {
         spherical: true,
         query: {
           ...baseMatch,
-          _id: { $nin: liveMatches.map((t) => t._id) },
+          $or: [
+            { "currentLocation.updatedAt": { $exists: false } },
+            { "currentLocation.updatedAt": { $lt: freshSince } },
+            { "currentLocation.coordinates": { $exists: false } },
+            { "currentLocation.coordinates": { $size: 0 } },
+          ],
         },
       },
     },

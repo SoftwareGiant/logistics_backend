@@ -214,6 +214,7 @@ exports.acceptRequirement = async (req, res) => {
         goodsType: claimed.goodsType,
         weight: claimed.weight,
         pickupDate: claimed.preferredDate,
+        pickupTime: claimed.preferredTime,
         price: claimed.budget || 0,
         ownerPayout,
         commissionPercent,

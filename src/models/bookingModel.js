@@ -82,6 +82,7 @@ const bookingSchema = new mongoose.Schema(
     commissionPercent: Number,
 
     pickupDate: Date,
+    pickupTime: String,
 
     isReturnTrip: {
       type: Boolean,
