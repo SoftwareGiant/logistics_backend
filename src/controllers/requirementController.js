@@ -7,8 +7,32 @@ const {
   isRequirementLive,
 } = require("../services/matching");
 const { computeOwnerPayout } = require("../services/pricing");
+const { sendPushToUsers } = require("../services/pushNotify");
 
 const MATCH_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
+
+// Pings every owner with a matching truck the moment a requirement goes live —
+// both a live socket event (while their dashboard is open) and a real OS push
+// notification (reaches them even if the site isn't open at all).
+function notifyMatchingOwners(io, requirement, matches) {
+  if (!matches.length) return;
+  const ownerIds = [...new Set(matches.map((t) => String(t.ownerId)))];
+  const pickup = requirement.pickupCity?.address || requirement.pickupCity?.city || "pickup";
+  const drop = requirement.dropCity?.address || requirement.dropCity?.city || "drop";
+  const budget = Number(requirement.budget || 0).toLocaleString("en-IN");
+  const payload = {
+    title: "New load nearby 🚛",
+    body: `${pickup} → ${drop} · ₹${budget} · ${requirement.truckType}`,
+    url: "/dashboard/truck-owner",
+    ring: true,
+  };
+  if (io) {
+    for (const ownerId of ownerIds) {
+      io.to(`user:${ownerId}`).emit("notification", payload);
+    }
+  }
+  sendPushToUsers(ownerIds, payload).catch((err) => console.error("Push notify failed:", err.message));
+}
 
 function withExpiry(requirement) {
   const obj = requirement.toObject ? requirement.toObject() : { ...requirement };
@@ -71,6 +95,8 @@ exports.addRequirement = async (req, res) => {
       requirement.status = "expired";
       requirement.expiryReason = "no_match";
       await requirement.save();
+    } else {
+      notifyMatchingOwners(req.app.get("io"), requirement, matches);
     }
 
     res.status(201).json({
@@ -141,6 +167,8 @@ exports.updateRequirement = async (req, res) => {
       requirement.status = "expired";
       requirement.expiryReason = "no_match";
       await requirement.save();
+    } else {
+      notifyMatchingOwners(req.app.get("io"), requirement, matches);
     }
 
     res.json({
@@ -224,14 +252,19 @@ exports.acceptRequirement = async (req, res) => {
       truck.availability = "busy";
       await truck.save();
 
+      const bookedPayload = {
+        title: "Load booked ✅",
+        body: `Truck ${truck.truckNumber} accepted your requirement — booking confirmed.`,
+        url: "/dashboard/company/my-booking",
+        ring: true,
+      };
       const io = req.app.get("io");
       if (io) {
-        io.to(`user:${claimed.companyId}`).emit("notification", {
-          title: "Load booked ✅",
-          body: `Truck ${truck.truckNumber} accepted your requirement — booking confirmed.`,
-          url: "/dashboard/company/my-booking",
-        });
+        io.to(`user:${claimed.companyId}`).emit("notification", bookedPayload);
       }
+      sendPushToUsers([claimed.companyId], bookedPayload).catch((err) =>
+        console.error("Push notify failed:", err.message)
+      );
 
       res.json({
         message: "Load accepted — booking created",

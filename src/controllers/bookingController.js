@@ -1,5 +1,6 @@
 const Booking = require("../models/bookingModel");
 const Truck = require("../models/truckModel");
+const { sendPushToUsers } = require("../services/pushNotify");
 
 // The company now sets the price itself (requirement budget), so there is no
 // platform markup — the amount the company sees is the amount they agreed to.
@@ -111,13 +112,17 @@ exports.updateBookingByOwner = async (req, res) => {
 
       await booking.save();
 
+      const tripPayload = {
+        title: "Trip Update 🚚",
+        body: `Truck ${booking.truckId.truckNumber} is now "${status.replace("_", " ")}".`,
+        url: "/dashboard/company/my-booking",
+      };
       if (io) {
-        io.to(`user:${booking.companyId}`).emit("notification", {
-          title: "Trip Update 🚚",
-          body: `Truck ${booking.truckId.truckNumber} is now "${status.replace("_", " ")}".`,
-          url: "/dashboard/company/my-booking",
-        });
+        io.to(`user:${booking.companyId}`).emit("notification", tripPayload);
       }
+      sendPushToUsers([booking.companyId], tripPayload).catch((err) =>
+        console.error("Push notify failed:", err.message)
+      );
 
       return res.json({ message: "Status updated successfully", booking });
     }
